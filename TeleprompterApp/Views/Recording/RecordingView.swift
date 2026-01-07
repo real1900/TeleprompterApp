@@ -193,10 +193,16 @@ struct RecordingView: View {
     private func startRecording() {
         do {
             _ = try cameraService.startRecording()
-            // START AUTO-SCROLLING when recording begins
+            
+            // Configure teleprompter engine with current script for WPM-based speed
+            if let script = appState.currentScript {
+                teleprompterEngine.configureForScript(script)
+            }
+            
+            // START AUTO-SCROLLING when recording begins (with 2-second ease-in)
             teleprompterEngine.resetToTop()
             teleprompterEngine.startScrolling()
-            print("Teleprompter scrolling started!")
+            print("Teleprompter scrolling started with 2s ease-in!")
         } catch {
             print("Recording failed: \(error)")
         }

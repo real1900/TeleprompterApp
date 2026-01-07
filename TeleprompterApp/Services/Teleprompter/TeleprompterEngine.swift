@@ -2,7 +2,7 @@ import Foundation
 import SwiftUI
 import Combine
 
-/// Engine that controls teleprompter scrolling animation
+/// Engine that controls teleprompter scrolling animation with smart physics
 @MainActor
 class TeleprompterEngine: ObservableObject {
     // MARK: - Published Properties
@@ -22,24 +22,47 @@ class TeleprompterEngine: ObservableObject {
     /// Visible height of the teleprompter view
     @Published var visibleHeight: CGFloat = 300   // Default non-zero
     
+    /// Current effective scroll speed (affected by ease-in)
+    @Published private(set) var currentSpeed: Double = 0
+    
     // MARK: - Configuration
     
-    /// Scroll speed in points per second
+    /// Target words per minute for scroll speed calculation
+    var targetWPM: Double = 140
+    
+    /// Word count of the current script (set externally)
+    var wordCount: Int = 100 {
+        didSet {
+            recalculateSpeed()
+        }
+    }
+    
+    /// Scroll speed in points per second (calculated from WPM or set manually)
     var scrollSpeed: Double = 50 {
         didSet {
-            // Clamp to valid range
-            scrollSpeed = min(max(scrollSpeed, TeleprompterSettings.scrollSpeedRange.lowerBound),
-                            TeleprompterSettings.scrollSpeedRange.upperBound)
+            scrollSpeed = min(max(scrollSpeed, 10), 300)
         }
     }
     
     /// Font size for the teleprompter text
-    var fontSize: CGFloat = 32 {
+    var fontSize: CGFloat = 28 {
         didSet {
             fontSize = min(max(fontSize, TeleprompterSettings.fontSizeRange.lowerBound),
                           TeleprompterSettings.fontSizeRange.upperBound)
+            recalculateSpeed()
         }
     }
+    
+    // MARK: - Ease-in Configuration
+    
+    /// Duration of the ease-in acceleration period (seconds)
+    private let easeInDuration: Double = 2.0
+    
+    /// Time elapsed since scroll started
+    private var scrollElapsedTime: Double = 0
+    
+    /// Whether currently in ease-in phase
+    private var isEasingIn: Bool = true
     
     // MARK: - Private Properties
     
@@ -57,20 +80,70 @@ class TeleprompterEngine: ObservableObject {
         displayLinkTarget = nil
     }
     
+    // MARK: - Speed Calculation
+    
+    /// Calculate scroll speed based on WPM and content
+    /// Formula: (Total Height / (Word Count / Target WPM)) / 60 = pixels/second
+    private func recalculateSpeed() {
+        guard wordCount > 0, contentHeight > 0 else { return }
+        
+        // Calculate reading time in seconds for the entire script at target WPM
+        let readingTimeSeconds = (Double(wordCount) / targetWPM) * 60.0
+        
+        // Calculate required scroll speed (pixels per second)
+        let scrollableHeight = max(1, contentHeight - visibleHeight)
+        let calculatedSpeed = scrollableHeight / readingTimeSeconds
+        
+        // Clamp to reasonable range
+        scrollSpeed = min(max(calculatedSpeed, 20), 200)
+        
+        print("TeleprompterEngine: Calculated speed \(scrollSpeed) px/s for \(wordCount) words at \(targetWPM) WPM")
+    }
+    
+    /// Configure for a specific script
+    func configureForScript(_ script: Script) {
+        wordCount = script.content.split(separator: " ").count
+        recalculateSpeed()
+    }
+    
+    // MARK: - Ease-in Curve
+    
+    /// Calculate the ease-in multiplier (0.0 to 1.0) based on elapsed time
+    /// Uses a smooth ease-in-out curve for natural acceleration
+    private func easeInMultiplier() -> Double {
+        guard isEasingIn else { return 1.0 }
+        
+        let t = min(scrollElapsedTime / easeInDuration, 1.0)
+        
+        // Ease-in-out cubic: smoother acceleration
+        // f(t) = t^2 * (3 - 2t) for smooth S-curve
+        // Or simpler ease-in: t^2
+        let easedT = t * t * (3.0 - 2.0 * t)  // Smooth S-curve
+        
+        if t >= 1.0 {
+            isEasingIn = false
+        }
+        
+        return easedT
+    }
+    
     // MARK: - Public Methods
     
-    /// Start the teleprompter scrolling
+    /// Start the teleprompter scrolling with ease-in
     func startScrolling() {
         guard !isScrolling else { 
             print("TeleprompterEngine: Already scrolling")
             return 
         }
         
-        print("TeleprompterEngine: Starting scroll - contentHeight: \(contentHeight), visibleHeight: \(visibleHeight), speed: \(scrollSpeed)")
+        print("TeleprompterEngine: Starting scroll - words: \(wordCount), speed: \(scrollSpeed), ease-in: \(easeInDuration)s")
         
         isScrolling = true
         isPaused = false
         lastTimestamp = 0
+        scrollElapsedTime = 0
+        isEasingIn = true
+        currentSpeed = 0
         
         // Create and retain the display link target
         let target = DisplayLinkTarget { [weak self] timestamp in
@@ -83,7 +156,7 @@ class TeleprompterEngine: ObservableObject {
         displayLink?.preferredFrameRateRange = CAFrameRateRange(minimum: 30, maximum: 120, preferred: 60)
         displayLink?.add(to: .main, forMode: .common)
         
-        print("TeleprompterEngine: Display link created and added to run loop")
+        print("TeleprompterEngine: Display link started with 2s ease-in")
     }
     
     /// Pause the teleprompter scrolling
@@ -116,17 +189,22 @@ class TeleprompterEngine: ObservableObject {
     func stopScrolling() {
         isScrolling = false
         isPaused = false
+        isEasingIn = false
+        currentSpeed = 0
         
         displayLink?.invalidate()
         displayLink = nil
         displayLinkTarget = nil
         lastTimestamp = 0
+        scrollElapsedTime = 0
         print("TeleprompterEngine: Stopped")
     }
     
     /// Reset scroll position to the top
     func resetToTop() {
         scrollOffset = 0
+        scrollElapsedTime = 0
+        isEasingIn = true
         print("TeleprompterEngine: Reset to top")
     }
     
@@ -142,7 +220,7 @@ class TeleprompterEngine: ObservableObject {
         scrollOffset = min(max(0, offset), maxOffset)
     }
     
-    /// Update scroll based on display link
+    /// Update scroll based on display link with ease-in physics
     private func updateScroll(timestamp: CFTimeInterval) {
         guard isScrolling, !isPaused else { return }
         
@@ -155,8 +233,15 @@ class TeleprompterEngine: ObservableObject {
         let deltaTime = timestamp - lastTimestamp
         lastTimestamp = timestamp
         
-        // Calculate scroll delta based on speed
-        let scrollDelta = scrollSpeed * deltaTime
+        // Accumulate elapsed time for ease-in calculation
+        scrollElapsedTime += deltaTime
+        
+        // Apply ease-in multiplier to speed
+        let easeMultiplier = easeInMultiplier()
+        currentSpeed = scrollSpeed * easeMultiplier
+        
+        // Calculate scroll delta based on eased speed
+        let scrollDelta = currentSpeed * deltaTime
         
         // Update offset
         let newOffset = scrollOffset + scrollDelta
@@ -184,6 +269,15 @@ class TeleprompterEngine: ObservableObject {
         let maxOffset = contentHeight - visibleHeight
         guard maxOffset > 0 else { return 0 }
         return min(1.0, scrollOffset / maxOffset)
+    }
+    
+    /// Current words per minute based on actual scroll speed
+    var currentWPM: Double {
+        guard contentHeight > visibleHeight, wordCount > 0 else { return targetWPM }
+        let scrollableHeight = contentHeight - visibleHeight
+        let secondsToComplete = scrollableHeight / currentSpeed
+        guard secondsToComplete > 0 else { return targetWPM }
+        return (Double(wordCount) / secondsToComplete) * 60.0
     }
 }
 
