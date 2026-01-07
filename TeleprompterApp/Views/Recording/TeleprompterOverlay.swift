@@ -30,13 +30,13 @@ struct TeleprompterOverlay: View {
                 )
                 .ignoresSafeArea()
                 
-                // Scrolling text container
+                // Scrolling text container - respects safe area
                 VStack(spacing: 0) {
                     ScrollView(.vertical, showsIndicators: false) {
                         VStack(spacing: 0) {
                             // Top spacer to position first line in active zone
                             Spacer()
-                                .frame(height: activeZoneHeight * 0.3)
+                                .frame(height: activeZoneHeight * 0.2)
                             
                             // The script text
                             Text(script.content)
@@ -61,7 +61,7 @@ struct TeleprompterOverlay: View {
                     }
                     .scrollDisabled(true) // Controlled by engine, not user scroll
                 }
-                .padding(.top, topPadding)
+                .safeAreaPadding(.top) // Respect safe area (below Dynamic Island)
                 .frame(width: columnWidth)
                 .frame(maxWidth: .infinity) // Center the column
                 
