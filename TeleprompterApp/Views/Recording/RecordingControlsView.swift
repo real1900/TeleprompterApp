@@ -65,7 +65,6 @@ struct RecordingControlsView: View {
                 }
                 .padding(.horizontal, 20)
                 .padding(.vertical, 16)
-                .background(.regularMaterial)
                 .clipShape(RoundedRectangle(cornerRadius: 20))
                 .padding(.horizontal, 16)
                 .padding(.bottom, 30)
