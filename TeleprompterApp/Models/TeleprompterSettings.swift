@@ -43,10 +43,10 @@ struct TeleprompterSettings: Codable, Equatable {
     // MARK: - Static Defaults
     
     static let `default` = TeleprompterSettings(
-        fontSize: 32,
+        fontSize: 28,
         scrollSpeed: 50,
         textColorHex: "#FFFFFF",
-        backgroundOpacity: 0.7,
+        backgroundOpacity: 0.6,
         lineSpacing: 8,
         horizontalPadding: 20,
         mirrorText: false,

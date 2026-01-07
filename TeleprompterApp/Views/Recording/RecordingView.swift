@@ -37,22 +37,16 @@ struct RecordingView: View {
                     isVisible: showFocusIndicator
                 )
                 
-                // Teleprompter Overlay (upper 1/3 with clipping and fade)
+                // Teleprompter Overlay (top portion, eye-contact optimized)
+                // Uses top ~25% of screen with narrow column near camera
                 VStack(spacing: 0) {
                     TeleprompterOverlay(
                         script: appState.currentScript ?? Script.sample,
                         engine: teleprompterEngine,
                         settings: appState.settings
                     )
-                    .frame(height: geometry.size.height * 0.33)
+                    .frame(height: geometry.size.height * 0.25)
                     .clipped()
-                    .mask(
-                        LinearGradient(
-                            colors: [.black, .black, .black.opacity(0)],
-                            startPoint: .top,
-                            endPoint: .bottom
-                        )
-                    )
                     
                     Spacer()
                 }

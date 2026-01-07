@@ -1,133 +1,120 @@
 import SwiftUI
 
-/// Semi-transparent scrolling text overlay for the teleprompter
+/// Teleprompter overlay optimized for eye contact with camera
+/// Layout is designed to keep text near the camera lens to minimize eye movement
 struct TeleprompterOverlay: View {
     let script: Script
     @ObservedObject var engine: TeleprompterEngine
     let settings: TeleprompterSettings
     
-    @State private var textSize: CGSize = .zero
-    @State private var dragOffset: CGFloat = 0
-    @GestureState private var isDragging = false
+    // Layout constants optimized for eye contact
+    private let textColumnWidthRatio: CGFloat = 0.62  // 60-65% of screen width
+    private let topPadding: CGFloat = 15              // Clear dynamic island/notch
+    private let activeZoneRatio: CGFloat = 0.15       // Active line in top 15%
     
     var body: some View {
         GeometryReader { geometry in
-            ZStack {
-                // Background - semi-transparent gradient
+            let columnWidth = geometry.size.width * textColumnWidthRatio
+            let activeZoneHeight = geometry.size.height * activeZoneRatio
+            
+            ZStack(alignment: .top) {
+                // Semi-transparent background with gradient fade
                 LinearGradient(
                     colors: [
-                        Color.black.opacity(settings.backgroundOpacity),
-                        Color.black.opacity(settings.backgroundOpacity * 0.5),
-                        Color.black.opacity(settings.backgroundOpacity * 0.3)
+                        settings.backgroundColor.opacity(settings.backgroundOpacity),
+                        settings.backgroundColor.opacity(settings.backgroundOpacity * 0.8),
+                        settings.backgroundColor.opacity(0)
                     ],
                     startPoint: .top,
                     endPoint: .bottom
                 )
-                .allowsHitTesting(false)
+                .ignoresSafeArea()
                 
-                // Scrolling Text
+                // Scrolling text container
                 VStack(spacing: 0) {
-                    // Top padding
-                    Spacer()
-                        .frame(height: geometry.size.height / 2)
-                    
-                    // Script text - full text with word wrap
-                    Text(script.content)
-                        .font(.system(size: settings.fontSize, weight: .medium))
-                        .foregroundColor(settings.textColor)
-                        .shadow(color: .black.opacity(0.8), radius: 2, x: 0, y: 1)
-                        .lineSpacing(settings.lineSpacing)
-                        .multilineTextAlignment(.center)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .frame(maxWidth: .infinity)
-                        .padding(.horizontal, settings.horizontalPadding)
-                        .scaleEffect(x: settings.mirrorText ? -1 : 1, y: 1)
-                        .background(
-                            GeometryReader { textGeometry in
-                                Color.clear.preference(
-                                    key: TextSizePreferenceKey.self,
-                                    value: textGeometry.size
-                                )
+                    ScrollView(.vertical, showsIndicators: false) {
+                        VStack(spacing: 0) {
+                            // Top spacer to position first line in active zone
+                            Spacer()
+                                .frame(height: activeZoneHeight * 0.3)
+                            
+                            // The script text
+                            Text(script.content)
+                                .font(.custom("SF Pro Rounded", size: settings.fontSize).weight(.medium))
+                                .foregroundColor(settings.textColor)
+                                .multilineTextAlignment(.center)
+                                .lineSpacing(settings.fontSize * 0.4)
+                                .fixedSize(horizontal: false, vertical: true)
+                                .frame(maxWidth: .infinity)
+                            
+                            // Bottom spacer for scroll-through
+                            Spacer()
+                                .frame(height: geometry.size.height * 0.5)
+                        }
+                        .frame(width: columnWidth)
+                        .background(GeometryReader { contentGeometry in
+                            Color.clear.onAppear {
+                                engine.contentHeight = contentGeometry.size.height
                             }
-                        )
-                    
-                    // Bottom padding
-                    Spacer()
-                        .frame(height: geometry.size.height / 2)
+                        })
+                        .offset(y: -engine.scrollOffset)
+                    }
+                    .scrollDisabled(true) // Controlled by engine, not user scroll
                 }
-                .offset(y: -engine.scrollOffset - dragOffset)
-                .gesture(
-                    DragGesture()
-                        .updating($isDragging) { _, state, _ in
-                            state = true
-                        }
-                        .onChanged { value in
-                            if engine.isScrolling && !engine.isPaused {
-                                engine.pauseScrolling()
+                .padding(.top, topPadding)
+                .frame(width: columnWidth)
+                .frame(maxWidth: .infinity) // Center the column
+                
+                // Manual scroll gesture overlay
+                Color.clear
+                    .contentShape(Rectangle())
+                    .gesture(
+                        DragGesture()
+                            .onChanged { value in
+                                // Pause auto-scroll when user drags
+                                if engine.isScrolling && !engine.isPaused {
+                                    engine.pauseScrolling()
+                                }
+                                
+                                // Manual scroll adjustment
+                                let dragDelta = -value.translation.height * 0.5
+                                let newOffset = engine.scrollOffset + dragDelta
+                                engine.setOffset(newOffset)
                             }
-                            dragOffset = -value.translation.height
-                        }
-                        .onEnded { value in
-                            engine.setOffset(engine.scrollOffset + dragOffset)
-                            dragOffset = 0
-                        }
-                )
-                
-                // Center line indicator
-                Rectangle()
-                    .fill(Color.red.opacity(0.6))
-                    .frame(height: 2)
-                    .frame(maxWidth: .infinity)
-                    .position(x: geometry.size.width / 2, y: geometry.size.height / 2)
-                    .allowsHitTesting(false)
-                
-                // Progress indicator
-                VStack {
-                    Spacer()
-                    ProgressView(value: engine.progress)
-                        .progressViewStyle(LinearProgressViewStyle(tint: .red))
-                        .frame(height: 4)
-                        .padding(.horizontal, 20)
-                        .padding(.bottom, 8)
-                }
-                .allowsHitTesting(false)
-            }
-            .onPreferenceChange(TextSizePreferenceKey.self) { size in
-                textSize = size
-                engine.contentHeight = size.height + geometry.size.height
-                engine.visibleHeight = geometry.size.height
+                            .onEnded { _ in
+                                // Resume auto-scroll if was scrolling
+                                if engine.isScrolling && engine.isPaused {
+                                    engine.resumeScrolling()
+                                }
+                            }
+                    )
             }
             .onAppear {
                 engine.visibleHeight = geometry.size.height
                 engine.scrollSpeed = settings.scrollSpeed
                 engine.fontSize = settings.fontSize
             }
-            .onChange(of: settings.scrollSpeed) { _, newValue in
-                engine.scrollSpeed = newValue
+            .onChange(of: settings.scrollSpeed) { _, newSpeed in
+                engine.scrollSpeed = newSpeed
             }
-            .onChange(of: settings.fontSize) { _, newValue in
-                engine.fontSize = newValue
+            .onChange(of: settings.fontSize) { _, newSize in
+                engine.fontSize = newSize
             }
         }
     }
 }
 
-// MARK: - Text Size Preference Key
-
-struct TextSizePreferenceKey: PreferenceKey {
-    static var defaultValue: CGSize = .zero
-    
-    static func reduce(value: inout CGSize, nextValue: () -> CGSize) {
-        value = nextValue()
-    }
-}
+// MARK: - Preview
 
 #Preview {
-    TeleprompterOverlay(
-        script: .sample,
-        engine: TeleprompterEngine(),
-        settings: .default
-    )
-    .frame(height: 400)
-    .background(Color.gray)
+    ZStack {
+        Color.black.ignoresSafeArea()
+        
+        TeleprompterOverlay(
+            script: Script.sample,
+            engine: TeleprompterEngine(),
+            settings: TeleprompterSettings.default
+        )
+        .frame(height: 300)
+    }
 }
