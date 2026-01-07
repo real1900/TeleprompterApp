@@ -16,9 +16,11 @@ struct TeleprompterOverlay: View {
         GeometryReader { geometry in
             let columnWidth = geometry.size.width * textColumnWidthRatio
             let activeZoneHeight = geometry.size.height * activeZoneRatio
+            let isLandscape = geometry.size.width > geometry.size.height
             
-            ZStack(alignment: .top) {
+            ZStack(alignment: isLandscape ? .leading : .top) {
                 // Semi-transparent background with gradient fade
+                // Adapts direction based on orientation
                 LinearGradient(
                     colors: [
                         settings.backgroundColor.opacity(settings.backgroundOpacity),
@@ -36,12 +38,13 @@ struct TeleprompterOverlay: View {
                         VStack(spacing: 0) {
                             // Top spacer to position first line below status bar/Dynamic Island
                             Spacer()
-                                .frame(height: 60) // Fixed padding below notch/status bar
+                                .frame(height: isLandscape ? 20 : 60) // Less padding in landscape
                             
                             // The script text
                             Text(script.content)
                                 .font(.custom("SF Pro Rounded", size: settings.fontSize).weight(.medium))
                                 .foregroundColor(settings.textColor)
+                                .shadow(color: .black.opacity(0.6), radius: 2, x: 0, y: 1)
                                 .multilineTextAlignment(.center)
                                 .lineSpacing(settings.fontSize * 0.4)
                                 .fixedSize(horizontal: false, vertical: true)
@@ -51,7 +54,7 @@ struct TeleprompterOverlay: View {
                             Spacer()
                                 .frame(height: geometry.size.height * 0.5)
                         }
-                        .frame(width: columnWidth)
+                        .frame(width: isLandscape ? geometry.size.width * 0.9 : columnWidth)
                         .background(GeometryReader { contentGeometry in
                             Color.clear.onAppear {
                                 engine.contentHeight = contentGeometry.size.height
@@ -61,8 +64,19 @@ struct TeleprompterOverlay: View {
                     }
                     .scrollDisabled(true) // Controlled by engine, not user scroll
                 }
-                .frame(width: columnWidth)
-                .frame(maxWidth: .infinity) // Center the column
+                .frame(width: isLandscape ? geometry.size.width * 0.9 : columnWidth)
+                .frame(maxWidth: .infinity, alignment: isLandscape ? .leading : .center)
+                .mask(
+                    LinearGradient(
+                        stops: [
+                            .init(color: .clear, location: 0),
+                            .init(color: .white, location: 0.3),
+                            .init(color: .white, location: 1.0)
+                        ],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                )
                 
                 // Manual scroll gesture overlay
                 Color.clear

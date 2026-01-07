@@ -69,7 +69,7 @@ struct RecordingControlsView: View {
             }
             .padding(.horizontal, 20)
             .padding(.vertical, 16)
-            .background(.ultraThinMaterial)
+            .background(.regularMaterial)
             .clipShape(RoundedRectangle(cornerRadius: 20))
         }
         .padding(.horizontal, 16)
@@ -138,7 +138,7 @@ struct RecordingStatusBar: View {
         }
         .padding(.horizontal, 20)
         .padding(.vertical, 12)
-        .background(Color.black.opacity(0.7))
+        .background(.ultraThinMaterial)
         .clipShape(RoundedRectangle(cornerRadius: 12))
         .padding(.horizontal, 16)
     }

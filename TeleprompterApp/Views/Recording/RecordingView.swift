@@ -37,20 +37,39 @@ struct RecordingView: View {
                     isVisible: showFocusIndicator
                 )
                 
-                // Teleprompter Overlay (top portion, eye-contact optimized)
-                // Background extends under notch, but TEXT stays in safe area
-                VStack(spacing: 0) {
-                    TeleprompterOverlay(
-                        script: appState.currentScript ?? Script.sample,
-                        engine: teleprompterEngine,
-                        settings: appState.settings
-                    )
-                    .frame(height: geometry.size.height * 0.30)
-                    .clipped()
-                    
-                    Spacer()
+                // Teleprompter Overlay - adaptive to orientation
+                // Portrait: taller overlay (45% of height) to bring text toward center
+                // Landscape: left side panel to keep text near camera
+                let isLandscape = geometry.size.width > geometry.size.height
+                
+                if isLandscape {
+                    // Landscape: teleprompter on the left side
+                    HStack(spacing: 0) {
+                        TeleprompterOverlay(
+                            script: appState.currentScript ?? Script.sample,
+                            engine: teleprompterEngine,
+                            settings: appState.settings
+                        )
+                        .frame(width: geometry.size.width * 0.40)
+                        .clipped()
+                        
+                        Spacer()
+                    }
+                } else {
+                    // Portrait: taller overlay, text closer to center
+                    VStack(spacing: 0) {
+                        TeleprompterOverlay(
+                            script: appState.currentScript ?? Script.sample,
+                            engine: teleprompterEngine,
+                            settings: appState.settings
+                        )
+                        .frame(height: geometry.size.height * 0.45)
+                        .clipped()
+                        
+                        Spacer()
+                    }
+                    .ignoresSafeArea(edges: .top)
                 }
-                .ignoresSafeArea(edges: .top)
                 
                 // Camera Controls Overlay
                 if showCameraControls {
@@ -217,6 +236,10 @@ struct RecordingView: View {
                 
                 // Export to Photos
                 try await cameraService.exportToPhotos(videoURL: videoURL)
+                print("Video exported successfully")
+                
+                // Clean up temp file after successful export
+                try? FileManager.default.removeItem(at: videoURL)
             } catch {
                 print("Stop recording failed: \(error)")
             }

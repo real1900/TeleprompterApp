@@ -567,20 +567,34 @@ class CinematicCameraService: NSObject, ObservableObject {
 // MARK: - AVCaptureFileOutputRecordingDelegate
 
 extension CinematicCameraService: AVCaptureFileOutputRecordingDelegate {
-    nonisolated func fileOutput(_ output: AVCaptureFileOutput, didStartRecordingTo fileURL: URL, from connections: [AVCaptureConnection]) {}
+    nonisolated func fileOutput(_ output: AVCaptureFileOutput, didStartRecordingTo fileURL: URL, from connections: [AVCaptureConnection]) {
+        print("Recording started to: \(fileURL)")
+    }
     
     nonisolated func fileOutput(_ output: AVCaptureFileOutput, didFinishRecordingTo outputFileURL: URL, from connections: [AVCaptureConnection], error: Error?) {
+        print("Recording finished: \(outputFileURL), error: \(String(describing: error))")
+        
         Task { @MainActor in
+            // Reset all recording state
             self.isRecording = false
             self.recordingDuration = 0
             self.recordingStartTime = nil
+            self.recordingTimer?.invalidate()
+            self.recordingTimer = nil
             
+            // Resume the continuation
             if let error {
                 self.recordingContinuation?.resume(throwing: CameraError.recordingFailed(error))
             } else {
                 self.recordingContinuation?.resume(returning: outputFileURL)
             }
             self.recordingContinuation = nil
+            
+            // Ensure session is still running (it should be, but verify)
+            if !self.captureSession.isRunning {
+                print("Warning: Session stopped after recording, restarting...")
+                self.startSession()
+            }
         }
     }
 }
