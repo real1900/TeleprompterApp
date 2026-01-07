@@ -3,40 +3,7 @@ import AVFoundation
 import Photos
 import Combine
 
-/// Manages camera permissions
-enum CameraPermission {
-    case notDetermined
-    case authorized
-    case denied
-    case restricted
-}
-
-/// Errors that can occur in camera operations
-enum CameraError: LocalizedError {
-    case cameraUnavailable
-    case microphoneUnavailable
-    case setupFailed(Error)
-    case permissionDenied
-    case recordingFailed(Error)
-    case exportFailed(Error)
-    
-    var errorDescription: String? {
-        switch self {
-        case .cameraUnavailable:
-            return "Front camera is not available"
-        case .microphoneUnavailable:
-            return "Microphone is not available"
-        case .setupFailed(let error):
-            return "Camera setup failed: \(error.localizedDescription)"
-        case .permissionDenied:
-            return "Camera permission was denied"
-        case .recordingFailed(let error):
-            return "Recording failed: \(error.localizedDescription)"
-        case .exportFailed(let error):
-            return "Export to Photos failed: \(error.localizedDescription)"
-        }
-    }
-}
+// NOTE: CameraPermission and CameraError enums are defined in CameraControls.swift
 
 /// Service that manages AVFoundation camera capture session
 @MainActor

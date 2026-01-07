@@ -161,6 +161,7 @@ enum CameraPermission {
 enum CameraError: Error, LocalizedError {
     case permissionDenied
     case cameraUnavailable
+    case microphoneUnavailable
     case setupFailed(Error)
     case recordingFailed(Error)
     case exportFailed(Error)
@@ -171,6 +172,8 @@ enum CameraError: Error, LocalizedError {
             return "Camera permission denied"
         case .cameraUnavailable:
             return "Camera is not available"
+        case .microphoneUnavailable:
+            return "Microphone is not available"
         case .setupFailed(let error):
             return "Camera setup failed: \(error.localizedDescription)"
         case .recordingFailed(let error):
