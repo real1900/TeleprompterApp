@@ -12,7 +12,7 @@ struct TeleprompterOverlay: View {
     @State private var dragStartOffset: CGFloat = 0
     
     // Layout constants optimized for eye contact
-    private let textColumnWidthRatio: CGFloat = 0.90  // 90% of screen width for portrait
+    private let textColumnWidthRatio: CGFloat = 1.0 // 90% of screen width for portrait
     private let activeZoneRatio: CGFloat = 0.15       // Active line in top 15%
     
     var body: some View {

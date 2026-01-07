@@ -12,68 +12,71 @@ struct RecordingControlsView: View {
     var onStopTapped: () -> Void
     
     var body: some View {
-        VStack(spacing: 16) {
-            // Recording status bar
-            if cameraService.isRecording {
-                RecordingStatusBar(
-                    duration: cameraService.recordingDuration,
-                    isScrolling: teleprompterEngine.isScrolling,
-                    isPaused: teleprompterEngine.isPaused,
-                    onPauseTapped: { teleprompterEngine.togglePause() }
-                )
-            }
-            
-            // Main control bar
-            HStack(spacing: 24) {
-                // Settings button
-                ControlButton(
-                    systemImage: "gear",
-                    label: "Settings",
-                    action: onSettingsTapped
-                )
-                .disabled(cameraService.isRecording)
-                
-                // Camera controls button
-                ControlButton(
-                    systemImage: "camera.aperture",
-                    label: "Camera",
-                    isActive: showCameraControls,
-                    action: { showCameraControls.toggle() }
-                )
-                
-                // Record/Stop button
-                RecordButton(
-                    isRecording: cameraService.isRecording,
-                    onTap: {
-                        if cameraService.isRecording {
-                            onStopTapped()
-                        } else {
-                            onRecordTapped()
+        if cameraService.isRecording {
+            // RECORDING MODE: Floating stop button + timer pill only
+            ZStack {
+                // Stop button - floating on right side, vertically centered
+                HStack {
+                    Spacer()
+                    Button {
+                        onStopTapped()
+                    } label: {
+                        ZStack {
+                            Circle()
+                                .fill(.white)
+                                .frame(width: 56, height: 56)
+                            
+                            RoundedRectangle(cornerRadius: 4)
+                                .fill(Color.red)
+                                .frame(width: 20, height: 20)
                         }
+                        .shadow(color: .black.opacity(0.3), radius: 8, x: 0, y: 4)
                     }
-                )
-                
-                // Script selector button
-                ControlButton(
-                    systemImage: "doc.text",
-                    label: "Script",
-                    action: onScriptTapped
-                )
-                .disabled(cameraService.isRecording)
-                
-                // Video quality indicator
-                VideoQualityButton(quality: cameraService.videoQuality) {
-                    cycleVideoQuality()
+                    .padding(.trailing, 20)
                 }
-                .disabled(cameraService.isRecording)
+                
+                // Timer pill - bottom right corner
+                VStack {
+                    Spacer()
+                    HStack {
+                        Spacer()
+                        Text(formatDuration(cameraService.recordingDuration))
+                            .font(.system(.subheadline, design: .monospaced).weight(.medium))
+                            .foregroundColor(.white)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 6)
+                            .background(.ultraThinMaterial)
+                            .clipShape(Capsule())
+                            .padding(.trailing, 20)
+                            .padding(.bottom, 20)
+                    }
+                }
             }
-            .padding(.horizontal, 20)
-            .padding(.vertical, 16)
-            .background(.regularMaterial)
-            .clipShape(RoundedRectangle(cornerRadius: 20))
+        } else {
+            // NOT RECORDING: Full control bar at bottom
+            VStack {
+                Spacer()
+                HStack(spacing: 24) {
+                    ControlButton(systemImage: "gear", label: "Settings", action: onSettingsTapped)
+                    ControlButton(systemImage: "camera.aperture", label: "Camera", isActive: showCameraControls, action: { showCameraControls.toggle() })
+                    RecordButton(isRecording: false, onTap: onRecordTapped)
+                    ControlButton(systemImage: "doc.text", label: "Script", action: onScriptTapped)
+                    VideoQualityButton(quality: cameraService.videoQuality) { cycleVideoQuality() }
+                }
+                .padding(.horizontal, 20)
+                .padding(.vertical, 16)
+                .background(.regularMaterial)
+                .clipShape(RoundedRectangle(cornerRadius: 20))
+                .padding(.horizontal, 16)
+                .padding(.bottom, 30)
+            }
         }
-        .padding(.horizontal, 16)
-        .padding(.bottom, 30)
+    }
+    
+    private func formatDuration(_ duration: TimeInterval) -> String {
+        let minutes = Int(duration) / 60
+        let seconds = Int(duration) % 60
+        return String(format: "%d:%02d", minutes, seconds)
     }
     
     private func cycleVideoQuality() {
