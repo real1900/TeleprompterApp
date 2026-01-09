@@ -193,7 +193,7 @@ struct ControlButton: View {
                 Text(label)
                     .font(.caption)
             }
-            .foregroundColor(isActive ? .yellow : .white)
+            .foregroundColor(isActive ? .red : .white)
         }
     }
 }
@@ -211,7 +211,7 @@ struct VideoQualityButton: View {
                     .font(.caption.bold())
                     .padding(.horizontal, 8)
                     .padding(.vertical, 4)
-                    .background(Color.yellow.opacity(0.3))
+                    .background(Color.red.opacity(0.3))
                     .cornerRadius(4)
                 Text("Quality")
                     .font(.caption)

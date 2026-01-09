@@ -7,8 +7,10 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		70C20CF15AF6D18C750761D3 /* MetalPreviewView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 058AA3267C9661242F7E9FF2 /* MetalPreviewView.swift */; };
 		APP001 /* TeleprompterApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = SRC001 /* TeleprompterApp.swift */; };
 		APP002 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = SRC002 /* ContentView.swift */; };
+		EE82A7561ACF9D486AE7420C /* DepthBlurProcessor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9E474412F7A090EC3C26161A /* DepthBlurProcessor.swift */; };
 		MDL001 /* Script.swift in Sources */ = {isa = PBXBuildFile; fileRef = SRC003 /* Script.swift */; };
 		MDL002 /* TeleprompterSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = SRC004 /* TeleprompterSettings.swift */; };
 		MDL003 /* CameraControls.swift in Sources */ = {isa = PBXBuildFile; fileRef = SRC020 /* CameraControls.swift */; };
@@ -29,6 +31,8 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		058AA3267C9661242F7E9FF2 /* MetalPreviewView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MetalPreviewView.swift; sourceTree = "<group>"; };
+		9E474412F7A090EC3C26161A /* DepthBlurProcessor.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = DepthBlurProcessor.swift; sourceTree = "<group>"; };
 		PRODUCT /* TeleprompterApp.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = TeleprompterApp.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		RES_ASSETS /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		RES_INFO /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
@@ -77,6 +81,7 @@
 			children = (
 				SRC005 /* CameraService.swift */,
 				SRC021 /* CinematicCameraService.swift */,
+				9E474412F7A090EC3C26161A /* DepthBlurProcessor.swift */,
 			);
 			path = Camera;
 			sourceTree = "<group>";
@@ -128,6 +133,7 @@
 				SRC011 /* RecordingControlsView.swift */,
 				SRC022 /* CameraControlsOverlay.swift */,
 				SRC023 /* FocusIndicatorView.swift */,
+				058AA3267C9661242F7E9FF2 /* MetalPreviewView.swift */,
 			);
 			path = Recording;
 			sourceTree = "<group>";
@@ -281,6 +287,8 @@
 				VW007 /* SettingsView.swift in Sources */,
 				VW008 /* CameraControlsOverlay.swift in Sources */,
 				VW009 /* FocusIndicatorView.swift in Sources */,
+				EE82A7561ACF9D486AE7420C /* DepthBlurProcessor.swift in Sources */,
+				70C20CF15AF6D18C750761D3 /* MetalPreviewView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -356,13 +364,13 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 11;
 				DEVELOPMENT_ASSET_PATHS = "";
-				DEVELOPMENT_TEAM = 9PGND8ZTJ6;
+				DEVELOPMENT_TEAM = A8DGL4UP7K;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = TeleprompterApp/Resources/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = Teleprompter;
+				INFOPLIST_KEY_CFBundleDisplayName = GoPrompt;
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
 				INFOPLIST_KEY_NSCameraUsageDescription = "We need camera access to record your video while using the teleprompter.";
@@ -378,7 +386,7 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = ws.teleprompter.app;
+				PRODUCT_BUNDLE_IDENTIFIER = com.teleprompter1900.app;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
@@ -448,13 +456,13 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 11;
 				DEVELOPMENT_ASSET_PATHS = "";
-				DEVELOPMENT_TEAM = 9PGND8ZTJ6;
+				DEVELOPMENT_TEAM = A8DGL4UP7K;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = TeleprompterApp/Resources/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = Teleprompter;
+				INFOPLIST_KEY_CFBundleDisplayName = GoPrompt;
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
 				INFOPLIST_KEY_NSCameraUsageDescription = "We need camera access to record your video while using the teleprompter.";
@@ -470,7 +478,7 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = ws.teleprompter.app;
+				PRODUCT_BUNDLE_IDENTIFIER = com.teleprompter1900.app;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;

@@ -27,126 +27,141 @@ struct RecordingView: View {
     }
     
     var body: some View {
-        GeometryReader { geometry in
-            ZStack {
-                // Camera Preview (full screen background)
-                CameraPreviewView(session: cameraService.captureSession)
-                    .ignoresSafeArea()
-                    .contentShape(Rectangle())
-                    .gesture(
-                        DragGesture(minimumDistance: 0)
-                            .onEnded { value in
-                                handleTapToFocus(at: value.location, in: geometry.size)
+        ZStack {
+            // LAYER 1: Full Screen Background (Video)
+            // Uses its own GeometryReader to capture full device dimensions for focus/aspect ratio
+            GeometryReader { fullGeo in
+                ZStack {
+                    if (cameraService.depthEnabled || cameraService.activeFilter != .none), 
+                       let processedImage = cameraService.processedPreviewImage {
+                        MetalPreviewView(ciImage: processedImage)
+                            .ignoresSafeArea()
+                            .contentShape(Rectangle())
+                            .gesture(
+                                DragGesture(minimumDistance: 0)
+                                    .onEnded { value in
+                                        handleTapToFocus(at: value.location, in: fullGeo.size)
+                                    }
+                            )
+                    } else {
+                        CameraPreviewView(session: cameraService.captureSession)
+                            .ignoresSafeArea()
+                            .contentShape(Rectangle())
+                            .gesture(
+                                DragGesture(minimumDistance: 0)
+                                    .onEnded { value in
+                                        handleTapToFocus(at: value.location, in: fullGeo.size)
+                                    }
+                            )
+                    }
+                    
+                    // Focus indicator (Must be in Layer 1 to match full-screen tap coordinates)
+                    FocusIndicatorView(
+                        position: focusIndicatorPosition,
+
+                        isVisible: showFocusIndicator
+                    )
+                    
+                    // Teleprompter Overlay - adaptive to orientation
+                    // MOVED TO LAYER 1 to allow background gradient to extend to top edge (status bar)
+                    let isLandscape = fullGeo.size.width > fullGeo.size.height
+                    
+                    if isLandscape {
+                        HStack(spacing: 0) {
+                            if cameraOnLeft {
+                                TeleprompterOverlay(
+                                    script: appState.currentScript ?? Script.sample,
+                                    engine: teleprompterEngine,
+                                    settings: appState.settings,
+                                    isLandscape: true
+                                )
+                                .frame(width: fullGeo.size.width * 0.40, height: fullGeo.size.height)
+                                .clipped()
+                                Spacer()
+                            } else {
+                                Spacer()
+                                TeleprompterOverlay(
+                                    script: appState.currentScript ?? Script.sample,
+                                    engine: teleprompterEngine,
+                                    settings: appState.settings,
+                                    isLandscape: true
+                                )
+                                .frame(width: fullGeo.size.width * 0.40, height: fullGeo.size.height)
+                                .clipped()
                             }
-                    )
-                
-                // Focus indicator
-                FocusIndicatorView(
-                    position: focusIndicatorPosition,
-                    isVisible: showFocusIndicator
-                )
-                
-                // Teleprompter Overlay - adaptive to orientation
-                // Portrait: taller overlay (45% of height) to bring text toward center
-                // Landscape: side panel on camera side for better eye contact
-                let isLandscape = geometry.size.width > geometry.size.height
-                
-                if isLandscape {
-                    // Landscape: teleprompter on the camera side, full height
-                    HStack(spacing: 0) {
-                        if cameraOnLeft {
-                            // Camera on left - text on left
+                        }
+                    } else {
+                        VStack(spacing: 0) {
                             TeleprompterOverlay(
                                 script: appState.currentScript ?? Script.sample,
                                 engine: teleprompterEngine,
                                 settings: appState.settings,
-                                isLandscape: true
+                                isLandscape: false
                             )
-                            .frame(width: geometry.size.width * 0.40, height: geometry.size.height)
+                            .frame(height: fullGeo.size.height * 0.45)
                             .clipped()
-                            
                             Spacer()
-                        } else {
-                            // Camera on right - text on right
-                            Spacer()
-                            
-                            TeleprompterOverlay(
-                                script: appState.currentScript ?? Script.sample,
-                                engine: teleprompterEngine,
-                                settings: appState.settings,
-                                isLandscape: true
-                            )
-                            .frame(width: geometry.size.width * 0.40, height: geometry.size.height)
-                            .clipped()
                         }
                     }
-                    .ignoresSafeArea()
-                } else {
-                    // Portrait: taller overlay, text closer to center
-                    VStack(spacing: 0) {
-                        TeleprompterOverlay(
-                            script: appState.currentScript ?? Script.sample,
-                            engine: teleprompterEngine,
-                            settings: appState.settings,
-                            isLandscape: false
+                    
+                    // Countdown Overlay (also full screen)
+                    if showCountdown {
+                        CountdownOverlay(value: countdownValue)
+                    }
+                    
+                    // Permission Request Overlay (also full screen)
+                    if permissionDenied {
+                        PermissionDeniedView()
+                    }
+                }
+            }
+            .ignoresSafeArea() // Allows video to fill behind notches and tab bars
+            
+            // LAYER 2: Controls & Interfaces (Respects Safe Area)
+            // This ensures controls sit ABOVE the TabBar and dynamic island automatically
+            GeometryReader { safeGeo in
+                ZStack {
+                    // Focus indicator (positioned absolutely based on tap, so might need full coords? 
+                    // Actually focus indicator should track tap. Tap was in fullGeo. 
+                    // But here we are in safeGeo. We might need to adjust or put FocusIndicator in Layer 1.
+                    // For simplicity, let's put FocusIndicator in Layer 1? 
+                    // Or Render it here with global offset. 
+                    // Pivot: Put FocusIndicator in Layer 1 (inside Background).
+                    
+
+                    
+                    // Camera Controls Overlay
+                    if showCameraControls {
+                        VStack {
+                            Spacer()
+                            CameraControlsOverlay(cameraService: cameraService)
+                                .padding(.horizontal, 20)
+                                .padding(.bottom, 160) // Keep relative padding for visual hierarchy
+                                .frame(maxWidth: safeGeo.size.width) // Prevent overflow expansion
+                        }
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                        .zIndex(2)
+                    }
+                    
+                    // Recording Controls (bottom)
+                    VStack {
+                        Spacer()
+                        RecordingControlsView(
+                            cameraService: cameraService,
+                            teleprompterEngine: teleprompterEngine,
+                            showCameraControls: $showCameraControls,
+                            onSettingsTapped: { showSettings = true },
+                            onScriptTapped: { showScriptPicker = true },
+                            onRecordTapped: handleRecordTapped,
+                            onStopTapped: handleStopTapped
                         )
-                        .frame(height: geometry.size.height * 0.45)
-                        .clipped()
-                        
-                        Spacer()
+                        // No logic padding needed! The GeometryReader respects Safe Area (TabBar height), 
+                        // so this will sit on top of the TabBar automatically.
                     }
-                    .ignoresSafeArea(edges: .top)
-                }
-                
-                // Camera Controls Overlay
-                if showCameraControls {
-                    VStack {
-                        Spacer()
-                        CameraControlsOverlay(cameraService: cameraService)
-                            .padding(.bottom, 160)
-                    }
-                    .transition(.move(edge: .bottom).combined(with: .opacity))
-                }
-                
-                // Recording Controls (bottom)
-                VStack {
-                    Spacer()
-                    RecordingControlsView(
-                        cameraService: cameraService,
-                        teleprompterEngine: teleprompterEngine,
-                        showCameraControls: $showCameraControls,
-                        onSettingsTapped: { showSettings = true },
-                        onScriptTapped: { showScriptPicker = true },
-                        onRecordTapped: handleRecordTapped,
-                        onStopTapped: handleStopTapped
-                    )
-                }
-                
-                // Active filter badge
-                if cameraService.activeFilter != .none {
-                    VStack {
-                        HStack {
-                            Spacer()
-                            FilterBadge(filter: cameraService.activeFilter)
-                                .padding(.trailing, 16)
-                                .padding(.top, 60)
-                        }
-                        Spacer()
-                    }
-                }
-                
-                // Countdown Overlay
-                if showCountdown {
-                    CountdownOverlay(value: countdownValue)
-                }
-                
-                // Permission Request Overlay
-                if permissionDenied {
-                    PermissionDeniedView()
                 }
             }
         }
-        .animation(.spring(response: 0.3), value: showCameraControls)
+        // Removed global .ignoresSafeArea() to allow Layer 2 to respect bounds
         .toolbar(cameraService.isRecording ? .hidden : .visible, for: .tabBar)
         .animation(.easeInOut(duration: 0.3), value: cameraService.isRecording)
         .task {
@@ -159,17 +174,41 @@ struct RecordingView: View {
             ScriptPickerSheet(selectedScript: $appState.currentScript)
         }
         .onDisappear {
-            cameraService.stopSession()
-            teleprompterEngine.stopScrolling()
+            // Only stop if we're actually leaving the screen (not just showing a sheet)
+            // We'll rely on onAppear to restart if needed
+            if !showSettings && !showScriptPicker {
+                cameraService.stopSession()
+                teleprompterEngine.stopScrolling()
+            }
         }
         .onReceive(NotificationCenter.default.publisher(for: UIDevice.orientationDidChangeNotification)) { _ in
             let newOrientation = UIDevice.current.orientation
             if newOrientation.isLandscape || newOrientation == .portrait {
                 deviceOrientation = newOrientation
             }
+            // Update camera connection orientation for Metal preview
+            cameraService.updateVideoOrientation(newOrientation)
         }
         .onAppear {
             UIDevice.current.beginGeneratingDeviceOrientationNotifications()
+            // Restart session if it was stopped
+            if !cameraService.isSessionRunning && !permissionDenied {
+                cameraService.startSession()
+            }
+            // Ensure correct initial orientation
+            cameraService.updateVideoOrientation(UIDevice.current.orientation)
+        }
+        .onChange(of: showSettings) { _, isShowing in
+            // Restart session when settings sheet is dismissed
+            if !isShowing && !cameraService.isSessionRunning && !permissionDenied {
+                cameraService.startSession()
+            }
+        }
+        .onChange(of: showScriptPicker) { _, isShowing in
+            // Restart session when script picker sheet is dismissed
+            if !isShowing && !cameraService.isSessionRunning && !permissionDenied {
+                cameraService.startSession()
+            }
         }
     }
     
@@ -248,6 +287,20 @@ struct RecordingView: View {
     }
     
     private func startRecording() {
+        // Ensure session is running before attempting to record
+        if !cameraService.isSessionRunning {
+            print("Session not running, starting session first...")
+            cameraService.startSession()
+            // Wait briefly for session to start, then try recording
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                self.beginRecording()
+            }
+        } else {
+            beginRecording()
+        }
+    }
+    
+    private func beginRecording() {
         do {
             _ = try cameraService.startRecording()
             
@@ -266,20 +319,26 @@ struct RecordingView: View {
     }
     
     private func handleStopTapped() {
+        print("📹 handleStopTapped: Starting stop process")
         Task {
             do {
+                print("📹 handleStopTapped: Calling stopRecording...")
                 let videoURL = try await cameraService.stopRecording()
+                print("📹 handleStopTapped: Got video URL: \(videoURL)")
+                
                 teleprompterEngine.stopScrolling()
                 teleprompterEngine.resetToTop()
                 
                 // Export to Photos
+                print("📹 handleStopTapped: Calling exportToPhotos...")
                 try await cameraService.exportToPhotos(videoURL: videoURL)
-                print("Video exported successfully")
+                print("✅ handleStopTapped: Video exported successfully")
                 
                 // Clean up temp file after successful export
                 try? FileManager.default.removeItem(at: videoURL)
+                print("📹 handleStopTapped: Cleaned up temp file")
             } catch {
-                print("Stop recording failed: \(error)")
+                print("❌ handleStopTapped: Stop recording failed: \(error)")
             }
         }
     }

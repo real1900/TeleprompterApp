@@ -1,0 +1,10 @@
+Welcome to GoPrompt! 🎬
+
+This is our first release featuring:
+• Professional teleprompter with smooth scrolling
+• Built-in video recording
+• Script management with search
+• Support for all orientations
+• iPad and iPhone optimized
+
+We'd love to hear your feedback!

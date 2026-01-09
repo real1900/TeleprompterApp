@@ -1,0 +1,1 @@
+teleprompter,prompter,script,video,recording,camera,autocue,speech,presenter,vlog

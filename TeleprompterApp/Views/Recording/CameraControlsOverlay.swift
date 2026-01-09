@@ -8,7 +8,7 @@ struct CameraControlsOverlay: View {
     @State private var showFilterPicker = false
     
     enum ControlPanel {
-        case focus, exposure, whiteBalance, quality
+        case focus, exposure, whiteBalance, filter, depth, quality
     }
     
     var body: some View {
@@ -72,6 +72,17 @@ struct CameraControlsOverlay: View {
                     showFilterPicker = true
                 }
                 
+                // Depth (Portrait Mode)
+                ControlPanelButton(
+                    icon: cameraService.depthEnabled ? "camera.aperture" : "camera.aperture",
+                    label: "Depth",
+                    isActive: expandedPanel == .depth || cameraService.depthEnabled
+                ) {
+                    withAnimation(.spring(response: 0.3)) {
+                        expandedPanel = expandedPanel == .depth ? nil : .depth
+                    }
+                }
+                
                 // Quality
                 ControlPanelButton(
                     icon: "video.fill",
@@ -105,6 +116,10 @@ struct CameraControlsOverlay: View {
                 ExposureControlPanel(cameraService: cameraService)
             case .whiteBalance:
                 WhiteBalanceControlPanel(cameraService: cameraService)
+            case .filter:
+                EmptyView() // Filter uses sheet, not inline panel
+            case .depth:
+                DepthControlPanel(cameraService: cameraService)
             case .quality:
                 QualityControlPanel(cameraService: cameraService)
             }
@@ -131,7 +146,7 @@ struct ControlPanelButton: View {
                 Text(label)
                     .font(.caption2)
             }
-            .foregroundColor(isActive ? .yellow : .white)
+            .foregroundColor(isActive ? .red : .white)
             .frame(minWidth: 50)
         }
     }
@@ -159,10 +174,10 @@ struct FocusControlPanel: View {
                             Text(mode.rawValue)
                                 .font(.caption2)
                         }
-                        .foregroundColor(cameraService.focusMode == mode ? .yellow : .white)
+                        .foregroundColor(cameraService.focusMode == mode ? .red : .white)
                         .padding(.horizontal, 12)
                         .padding(.vertical, 8)
-                        .background(cameraService.focusMode == mode ? Color.yellow.opacity(0.2) : Color.clear)
+                        .background(cameraService.focusMode == mode ? Color.red.opacity(0.2) : Color.clear)
                         .cornerRadius(8)
                     }
                 }
@@ -178,7 +193,7 @@ struct FocusControlPanel: View {
                         Text("Near")
                             .font(.caption2)
                         Slider(value: $cameraService.focusPosition, in: 0...1)
-                            .tint(.yellow)
+                            .tint(.red)
                         Text("Far")
                             .font(.caption2)
                     }
@@ -210,7 +225,7 @@ struct ExposureControlPanel: View {
                         .font(.caption.monospacedDigit())
                 }
                 Slider(value: $cameraService.exposureCompensation, in: -3...3)
-                    .tint(.yellow)
+                    .tint(.red)
             }
             
             // Exposure mode picker
@@ -221,10 +236,10 @@ struct ExposureControlPanel: View {
                     } label: {
                         Text(mode.rawValue)
                             .font(.caption)
-                            .foregroundColor(cameraService.exposureMode == mode ? .yellow : .white)
+                            .foregroundColor(cameraService.exposureMode == mode ? .red : .white)
                             .padding(.horizontal, 10)
                             .padding(.vertical, 6)
-                            .background(cameraService.exposureMode == mode ? Color.yellow.opacity(0.2) : Color.clear)
+                            .background(cameraService.exposureMode == mode ? Color.red.opacity(0.2) : Color.clear)
                             .cornerRadius(6)
                     }
                 }
@@ -238,7 +253,7 @@ struct ExposureControlPanel: View {
                             .font(.caption)
                             .frame(width: 60, alignment: .leading)
                         Slider(value: $cameraService.iso, in: cameraService.minISO...cameraService.maxISO)
-                            .tint(.yellow)
+                            .tint(.red)
                         Text("\(Int(cameraService.iso))")
                             .font(.caption.monospacedDigit())
                             .frame(width: 50)
@@ -273,10 +288,10 @@ struct WhiteBalanceControlPanel: View {
                                 Text(mode.rawValue)
                                     .font(.caption2)
                             }
-                            .foregroundColor(cameraService.whiteBalanceMode == mode ? .yellow : .white)
+                            .foregroundColor(cameraService.whiteBalanceMode == mode ? .red : .white)
                             .padding(.horizontal, 10)
                             .padding(.vertical, 8)
-                            .background(cameraService.whiteBalanceMode == mode ? Color.yellow.opacity(0.2) : Color.clear)
+                            .background(cameraService.whiteBalanceMode == mode ? Color.red.opacity(0.2) : Color.clear)
                             .cornerRadius(8)
                         }
                     }
@@ -334,11 +349,73 @@ struct QualityControlPanel: View {
                             .foregroundColor(cameraService.videoQuality == quality ? .black : .white)
                             .padding(.horizontal, 16)
                             .padding(.vertical, 10)
-                            .background(cameraService.videoQuality == quality ? Color.yellow : Color.white.opacity(0.2))
+                            .background(cameraService.videoQuality == quality ? Color.red : Color.white.opacity(0.2))
                             .cornerRadius(8)
                     }
                 }
             }
+        }
+    }
+}
+
+// MARK: - Depth Control Panel
+
+struct DepthControlPanel: View {
+    @ObservedObject var cameraService: CinematicCameraService
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("DEPTH / PORTRAIT")
+                .font(.caption.bold())
+                .foregroundColor(.secondary)
+            
+            // Portrait Effect Toggle
+            HStack {
+                Text("Portrait Effect")
+                    .font(.caption)
+                Spacer()
+                Toggle("", isOn: $cameraService.depthEnabled)
+                    .labelsHidden()
+                    .tint(.red)
+            }
+            
+            // Aperture slider (when depth is enabled)
+            if cameraService.depthEnabled {
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack {
+                        Text("Aperture")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                        Spacer()
+                        Text("f/\(String(format: "%.1f", cameraService.simulatedAperture))")
+                            .font(.caption.monospacedDigit())
+                    }
+                    HStack {
+                        Text("More blur")
+                            .font(.caption2)
+                            .foregroundColor(.secondary)
+                        Slider(
+                            value: $cameraService.simulatedAperture,
+                            in: CinematicCameraService.minAperture...CinematicCameraService.maxAperture
+                        )
+                        .tint(.red)
+                        Text("Less blur")
+                            .font(.caption2)
+                            .foregroundColor(.secondary)
+                    }
+                }
+            }
+            
+            // Info text
+            HStack(spacing: 4) {
+                Image(systemName: "info.circle")
+                    .font(.caption)
+                    .foregroundColor(.blue)
+                Text("Portrait effect creates background blur for a cinematic look.")
+                    .font(.caption2)
+                    .foregroundColor(.secondary)
+            }
+            .padding(.top, 4)
         }
     }
 }
@@ -381,12 +458,12 @@ struct FilterPickerSheet: View {
                                         .frame(width: 60, height: 60)
                                         .overlay(
                                             RoundedRectangle(cornerRadius: 8)
-                                                .stroke(selectedFilter == filter ? Color.yellow : Color.clear, lineWidth: 3)
+                                                .stroke(selectedFilter == filter ? Color.red : Color.clear, lineWidth: 3)
                                         )
                                     
                                     Text(filter.rawValue)
                                         .font(.caption)
-                                        .foregroundColor(selectedFilter == filter ? .yellow : .primary)
+                                        .foregroundColor(selectedFilter == filter ? .red : .primary)
                                 }
                             }
                         }
@@ -418,7 +495,7 @@ struct FilterPickerSheet: View {
         case .fade: return .mint
         case .instant: return .pink
         case .process: return .teal
-        case .transfer: return .yellow
+        case .transfer: return .red
         case .cinematic: return .red
         }
     }
