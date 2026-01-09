@@ -75,7 +75,7 @@ struct CameraControlsOverlay: View {
                 // Depth (Portrait Mode)
                 ControlPanelButton(
                     icon: cameraService.depthEnabled ? "camera.aperture" : "camera.aperture",
-                    label: "Depth",
+                    label: "Blur",
                     isActive: expandedPanel == .depth || cameraService.depthEnabled
                 ) {
                     withAnimation(.spring(response: 0.3)) {
@@ -365,13 +365,13 @@ struct DepthControlPanel: View {
     
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("DEPTH / PORTRAIT")
+            Text("BLUR BACKGROUND")
                 .font(.caption.bold())
                 .foregroundColor(.secondary)
             
             // Portrait Effect Toggle
             HStack {
-                Text("Portrait Effect")
+                Text("Background Blur")
                     .font(.caption)
                 Spacer()
                 Toggle("", isOn: $cameraService.depthEnabled)
@@ -411,7 +411,7 @@ struct DepthControlPanel: View {
                 Image(systemName: "info.circle")
                     .font(.caption)
                     .foregroundColor(.blue)
-                Text("Portrait effect creates background blur for a cinematic look.")
+                Text("Background blur creates a cinematic look.")
                     .font(.caption2)
                     .foregroundColor(.secondary)
             }

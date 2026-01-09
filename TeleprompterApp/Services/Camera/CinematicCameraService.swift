@@ -217,6 +217,14 @@ class CinematicCameraService: NSObject, ObservableObject {
     }
     
     private func setupSession() throws {
+        // Configure Audio Session for recording
+        do {
+            try AVAudioSession.sharedInstance().setCategory(.playAndRecord, mode: .videoRecording, options: [.defaultToSpeaker, .allowBluetooth])
+            try AVAudioSession.sharedInstance().setActive(true)
+        } catch {
+            print("⚠️ Audio session configuration failed: \(error)")
+        }
+
         captureSession.beginConfiguration()
         defer { captureSession.commitConfiguration() }
         
@@ -808,8 +816,10 @@ class CinematicCameraService: NSObject, ObservableObject {
             assetWriter!.add(assetWriterAudioInput!)
         }
         
+        
         assetWriter!.startWriting()
-        assetWriter!.startSession(atSourceTime: .zero)
+        // assetWriter!.startSession(atSourceTime: .zero) // REMOVED: We will start session at Source Time of first video frame
+
         
         print("Asset writer started for depth recording")
     }
@@ -848,7 +858,8 @@ class CinematicCameraService: NSObject, ObservableObject {
     func writeAudioSample(_ sampleBuffer: CMSampleBuffer) {
         guard isWritingProcessedVideo,
               let audioInput = assetWriterAudioInput,
-              audioInput.isReadyForMoreMediaData else {
+              audioInput.isReadyForMoreMediaData,
+              assetWriterStartTime != nil else { // Drop audio until video starts session
             return
         }
         
@@ -1040,13 +1051,15 @@ extension CinematicCameraService: AVCaptureVideoDataOutputSampleBufferDelegate, 
             
             // If recording with asset writer, write the frame (only if depth sync not handling it)
             if self.isWritingProcessedVideo {
-                // Calculate relative time from recording start
+                // Determine Start Time from first frame
                 if self.assetWriterStartTime == nil {
                     self.assetWriterStartTime = presentationTime
+                    self.assetWriter?.startSession(atSourceTime: presentationTime)
+                    print("🎥 Started AssetWriter Session at \(presentationTime.seconds)")
                 }
                 
-                let relativeTime = CMTimeSubtract(presentationTime, self.assetWriterStartTime!)
-                self.writeProcessedFrame(ciImage, at: relativeTime)
+                // Write at Source Time (PresentationTime)
+                self.writeProcessedFrame(ciImage, at: presentationTime)
             }
         }
     }
@@ -1136,9 +1149,11 @@ extension CinematicCameraService: AVCaptureDataOutputSynchronizerDelegate {
             if self.isWritingProcessedVideo {
                 if self.assetWriterStartTime == nil {
                     self.assetWriterStartTime = presentationTime
+                    self.assetWriter?.startSession(atSourceTime: presentationTime)
+                    print("🎥 Started AssetWriter Session (Sync) at \(presentationTime.seconds)")
                 }
-                let relativeTime = CMTimeSubtract(presentationTime, self.assetWriterStartTime!)
-                self.writeProcessedFrame(ciImage, at: relativeTime)
+                // Write at Source Time (PresentationTime)
+                self.writeProcessedFrame(ciImage, at: presentationTime)
             }
         }
     }
