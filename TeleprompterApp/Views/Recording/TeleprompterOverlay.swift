@@ -61,9 +61,9 @@ struct TeleprompterOverlay: View {
                                 .padding(.horizontal, isLandscape ? 16 : 20)
                                 .padding(.leading, isLandscape ? max(geometry.safeAreaInsets.leading, 38) : 0)
                             
-                            // Bottom spacer for scroll-through
+                            // Bottom spacer for scroll-through (Increased to 85% to allow last line to reach active zone)
                             Spacer()
-                                .frame(height: geometry.size.height * 0.5)
+                                .frame(height: geometry.size.height * 0.76)
                         }
                         .frame(width: isLandscape ? landscapeColumnWidth : columnWidth)
                         .background(GeometryReader { contentGeometry in
