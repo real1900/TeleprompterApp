@@ -63,7 +63,7 @@ class CinematicCameraService: NSObject, ObservableObject {
         didSet { 
             depthProcessor.isEnabled = depthEnabled
             print("⚙️ Depth enabled: \(depthEnabled), processor.isEnabled: \(depthProcessor.isEnabled)")
-            applyDepthEffect() 
+            // No session reconfiguration needed for Vision-based blur
         }
     }
     @Published var simulatedAperture: Float = 2.8 {
@@ -107,11 +107,11 @@ class CinematicCameraService: NSObject, ObservableObject {
     private var audioDeviceInput: AVCaptureDeviceInput?
     private let movieFileOutput = AVCaptureMovieFileOutput()
     
-    // Depth capture components
-    private var depthDataOutput: AVCaptureDepthDataOutput?
+    // Depth capturing components REMOVED for Center Stage compatibility
+    // Vision-based blur uses standard video frames
+    
     private var videoDataOutput: AVCaptureVideoDataOutput?
-    private var audioDataOutput: AVCaptureAudioDataOutput? // Added Audio Output
-    private var dataOutputSynchronizer: AVCaptureDataOutputSynchronizer?
+    private var audioDataOutput: AVCaptureAudioDataOutput?
     
     // Depth processing
     let depthProcessor = DepthBlurProcessor()
@@ -127,7 +127,7 @@ class CinematicCameraService: NSObject, ObservableObject {
     private var isWritingProcessedVideo = false
     private var assetWriterStartTime: CMTime?
     private var framesWritten: Int = 0
-    private var depthSyncWritingFrames = false  // True when depth synchronizer is writing frames
+    // private var depthSyncWritingFrames = false  // REMOVED
     
     // MARK: - Queues
     
@@ -314,8 +314,8 @@ class CinematicCameraService: NSObject, ObservableObject {
             }
         }
         
-        // Note: Depth output will be added dynamically when user enables depth mode
-        // This avoids camera session conflicts on app start
+        // Note: Depth output logic removed to support Center Stage
+        // We now use Vision-based segmentation on standard video frames
         
         // Add movie file output (for non-depth recording fallback)
         guard captureSession.canAddOutput(movieFileOutput) else {
@@ -620,62 +620,10 @@ class CinematicCameraService: NSObject, ObservableObject {
     
     // MARK: - Portrait/Depth Effect
     
+    // applyDepthEffect REMOVED - specialized hardware depth capture conflicts with Center Stage.
+    // We now use software-only Vision segmentation which works with standard capture.
     private func applyDepthEffect() {
-        sessionQueue.async { [weak self] in
-            guard let self else { return }
-            
-            if self.depthEnabled {
-                // Add depth output and create synchronizer when depth is enabled
-                self.captureSession.beginConfiguration()
-                
-                // Add depth output if not already added
-                if self.depthDataOutput == nil && self.isDepthSupported {
-                    let depthOutput = AVCaptureDepthDataOutput()
-                    depthOutput.isFilteringEnabled = true
-                    
-                    if self.captureSession.canAddOutput(depthOutput) {
-                        self.captureSession.addOutput(depthOutput)
-                        self.depthDataOutput = depthOutput
-                        print("⚙️ Depth output added to session")
-                    }
-                }
-                
-                self.captureSession.commitConfiguration()
-                
-                // Create synchronizer
-                Task { @MainActor in
-                    if self.dataOutputSynchronizer == nil,
-                       let videoOut = self.videoDataOutput,
-                       let depthOut = self.depthDataOutput {
-                        let synchronizer = AVCaptureDataOutputSynchronizer(dataOutputs: [videoOut, depthOut])
-                        synchronizer.setDelegate(self, queue: self.videoProcessingQueue)
-                        self.dataOutputSynchronizer = synchronizer
-                        print("⚙️ Depth synchronizer created")
-                    }
-                }
-            } else {
-                // Remove synchronizer and depth output when disabled
-                Task { @MainActor in
-                    if self.dataOutputSynchronizer != nil {
-                        self.dataOutputSynchronizer?.setDelegate(nil, queue: nil)
-                        self.dataOutputSynchronizer = nil
-                        self.depthSyncWritingFrames = false
-                        print("⚙️ Depth synchronizer destroyed")
-                    }
-                }
-                
-                // Remove depth output from session
-                self.captureSession.beginConfiguration()
-                if let depthOut = self.depthDataOutput {
-                    self.captureSession.removeOutput(depthOut)
-                    self.depthDataOutput = nil
-                    print("⚙️ Depth output removed from session")
-                }
-                self.captureSession.commitConfiguration()
-            }
-            
-            print("⚙️ Depth effect: \(self.depthEnabled ? "enabled" : "disabled")")
-        }
+        // No-op
     }
     
     private func applyAperture() {
@@ -714,7 +662,6 @@ class CinematicCameraService: NSObject, ObservableObject {
             // Reset frame tracking state
             assetWriterStartTime = nil
             framesWritten = 0
-            depthSyncWritingFrames = false
             isWritingProcessedVideo = true
         } else {
             // Use standard movie file output for non-depth recording
@@ -1032,24 +979,28 @@ extension CinematicCameraService: AVCaptureVideoDataOutputSampleBufferDelegate, 
             // Capture dimensions from live buffer
             self.lastFrameSize = CGSize(width: CVPixelBufferGetWidth(pixelBuffer), height: CVPixelBufferGetHeight(pixelBuffer))
             
-            // If depth synchronizer is actively writing frames, skip writing here
-            if self.depthSyncWritingFrames {
-                return
-            }
-            
             var ciImage = CIImage(cvPixelBuffer: pixelBuffer)
             
-            // Apply filter if one is selected
+            // 1. Apply Depth Blur (if enabled)
+            // We do this BEFORE consumers (preview/writer) so everyone sees the blur
+            if self.depthProcessor.isEnabled {
+                // Pass nil for depthData since we are using Vision segmentation
+                if let processedImage = self.depthProcessor.processFrame(videoBuffer: sampleBuffer, depthData: nil) {
+                    ciImage = processedImage
+                }
+            }
+            
+            // 2. Apply Filters (if enabled)
             if self.activeFilter != .none {
                 if let filtered = self.applyFilter(self.activeFilter, to: ciImage) {
                     ciImage = filtered
                 }
             }
             
-            // Update preview for Metal rendering
+            // 3. Update Preview
             self.processedPreviewImage = ciImage
             
-            // If recording with asset writer, write the frame (only if depth sync not handling it)
+            // 4. Record Frame (if recording processed video)
             if self.isWritingProcessedVideo {
                 // Determine Start Time from first frame
                 if self.assetWriterStartTime == nil {
@@ -1094,68 +1045,7 @@ extension CinematicCameraService: AVCaptureVideoDataOutputSampleBufferDelegate, 
 
 // MARK: - AVCaptureDataOutputSynchronizerDelegate
 
-extension CinematicCameraService: AVCaptureDataOutputSynchronizerDelegate {
-    nonisolated func dataOutputSynchronizer(_ synchronizer: AVCaptureDataOutputSynchronizer, didOutput synchronizedDataCollection: AVCaptureSynchronizedDataCollection) {
-        // Get the outputs from the synchronizer's dataOutputs array
-        let dataOutputs = synchronizer.dataOutputs
-        
-        guard let videoOutput = dataOutputs.first(where: { $0 is AVCaptureVideoDataOutput }) as? AVCaptureVideoDataOutput,
-              let depthOutput = dataOutputs.first(where: { $0 is AVCaptureDepthDataOutput }) as? AVCaptureDepthDataOutput else {
-            print("⚠️ Synchronizer: Could not find video or depth output")
-            return
-        }
-        
-        // Get synchronized video and depth data
-        guard let videoData = synchronizedDataCollection.synchronizedData(for: videoOutput) as? AVCaptureSynchronizedSampleBufferData,
-              !videoData.sampleBufferWasDropped else {
-            return
-        }
-        
-        let videoSampleBuffer = videoData.sampleBuffer
-        let presentationTime = CMSampleBufferGetPresentationTimeStamp(videoSampleBuffer)
-        
-        // Check if we have depth data (optional)
-        let depthData = synchronizedDataCollection.synchronizedData(for: depthOutput) as? AVCaptureSynchronizedDepthData
-        
-        // Process frame on main actor
-        Task { @MainActor in
-            guard let pixelBuffer = CMSampleBufferGetImageBuffer(videoSampleBuffer) else { return }
-            
-            // Capture dimensions from live buffer
-            self.lastFrameSize = CGSize(width: CVPixelBufferGetWidth(pixelBuffer), height: CVPixelBufferGetHeight(pixelBuffer))
-            
-            var ciImage = CIImage(cvPixelBuffer: pixelBuffer)
-            
-            // If we have depth data and processor is enabled, apply depth blur
-            if let depthData = depthData, self.depthProcessor.isEnabled {
-                self.depthSyncWritingFrames = true
-                
-                if let processedImage = self.depthProcessor.processFrame(videoBuffer: videoSampleBuffer, depthData: depthData.depthData) {
-                    ciImage = processedImage
-                }
-            }
-            
-            // Apply filter if selected (on top of depth blur or raw image)
-            if self.activeFilter != .none {
-                if let filtered = self.applyFilter(self.activeFilter, to: ciImage) {
-                    ciImage = filtered
-                }
-            }
-            
-            // Update preview
-            self.processedPreviewImage = ciImage
-            
-            // If recording, write frame
-            if self.isWritingProcessedVideo {
-                if self.assetWriterStartTime == nil {
-                    self.assetWriterStartTime = presentationTime
-                    self.assetWriter?.startSession(atSourceTime: presentationTime)
-                    print("🎥 Started AssetWriter Session (Sync) at \(presentationTime.seconds)")
-                }
-                // Write at Source Time (PresentationTime)
-                self.writeProcessedFrame(ciImage, at: presentationTime)
-            }
-        }
-    }
-}
+// MARK: - AVCaptureDataOutputSynchronizerDelegate
+// Conformance REMOVED - no longer using hardware depth sync
+
 
