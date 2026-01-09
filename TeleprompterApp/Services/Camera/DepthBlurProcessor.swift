@@ -14,7 +14,15 @@ class DepthBlurProcessor: ObservableObject {
     /// Controls the radius of the background blur
     var aperture: Float = 2.8
     
-    /// Whether blur processing is enabled
+    enum EffectMode {
+        case blur
+        case greenScreen
+    }
+    
+    /// Current active effect
+    var effectMode: EffectMode = .blur
+    
+    /// Whether processing is enabled
     var isEnabled: Bool = false
     
     /// Core Image context
@@ -64,7 +72,13 @@ class DepthBlurProcessor: ObservableObject {
             try handler.perform([segmentationRequest])
             
             guard let result = segmentationRequest.results?.first else {
-                return inputImage // Fail safe: return original
+                // If segmentation fails, and we are in Green Screen mode,
+                // we should treat the entire frame as background (Green)
+                if effectMode == .greenScreen {
+                    let greenColor = CIColor(red: 0, green: 1, blue: 0)
+                    return CIImage(color: greenColor).cropped(to: inputImage.extent)
+                }
+                return inputImage // Fail safe for Blur: return original
             }
             
             // Mask is OneComponent8 (0..255). 255 = Person. 0 = Background.
@@ -79,22 +93,34 @@ class DepthBlurProcessor: ObservableObject {
                     y: inputImage.extent.height / maskImage.extent.height
                 ))
             
-            // 3. Create Blurred Background
-            // Map aperture 1.4...16.0 to Blur Radius 30...0
-            let normalizedAp = (min(max(aperture, 1.4), 16.0) - 1.4) / (16.0 - 1.4)
-            let blurRadius = 30.0 * (1.0 - normalizedAp)
+            // 3. Create Background (Blurred or Green)
+            var backgroundImage: CIImage
             
-            let blurredImage = inputImage
-                .clampedToExtent()
-                .applyingFilter("CIGaussianBlur", parameters: [
-                    kCIInputRadiusKey: blurRadius
-                ])
-                .cropped(to: inputImage.extent)
+            switch effectMode {
+            case .greenScreen:
+                // Solid pure green background (Chroma key friendly: #00FF00)
+                // Use inputImage extent to ensure correct sizing
+                let greenColor = CIColor(red: 0, green: 1, blue: 0)
+                backgroundImage = CIImage(color: greenColor).cropped(to: inputImage.extent)
+                
+            case .blur:
+                // Blurred background
+                // Map aperture 1.4...16.0 to Blur Radius 30...0
+                let normalizedAp = (min(max(aperture, 1.4), 16.0) - 1.4) / (16.0 - 1.4)
+                let blurRadius = 30.0 * (1.0 - normalizedAp)
+                
+                backgroundImage = inputImage
+                    .clampedToExtent()
+                    .applyingFilter("CIGaussianBlur", parameters: [
+                        kCIInputRadiusKey: blurRadius
+                    ])
+                    .cropped(to: inputImage.extent)
+            }
             
-            // 4. Composite: Person (Sharp) over Background (Blurred)
+            // 4. Composite: Person (Sharp) over Background
             // Mask is 1.0 (Person).
             return inputImage.applyingFilter("CIBlendWithMask", parameters: [
-                kCIInputBackgroundImageKey: blurredImage,
+                kCIInputBackgroundImageKey: backgroundImage,
                 kCIInputMaskImageKey: scaledMask
             ])
             

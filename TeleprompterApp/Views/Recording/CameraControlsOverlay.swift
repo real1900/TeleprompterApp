@@ -20,77 +20,82 @@ struct CameraControlsOverlay: View {
             }
             
             // Control buttons bar
-            HStack(spacing: 16) {
-                // Focus
-                ControlPanelButton(
-                    icon: cameraService.focusMode.systemImage,
-                    label: "Focus",
-                    isActive: expandedPanel == .focus
-                ) {
-                    withAnimation(.spring(response: 0.3)) {
-                        expandedPanel = expandedPanel == .focus ? nil : .focus
+            VStack(spacing: 12) {
+                // Row 1: Camera Basics & Face Tracking
+                HStack(spacing: 16) {
+                    // Focus
+                    ControlPanelButton(
+                        icon: cameraService.focusMode.systemImage,
+                        label: "Focus",
+                        isActive: expandedPanel == .focus
+                    ) {
+                        togglePanel(.focus)
+                    }
+                    
+                    // Exposure
+                    ControlPanelButton(
+                        icon: cameraService.exposureMode.systemImage,
+                        label: "Expo",
+                        isActive: expandedPanel == .exposure
+                    ) {
+                        togglePanel(.exposure)
+                    }
+                    
+                    // White Balance
+                    ControlPanelButton(
+                        icon: cameraService.whiteBalanceMode.systemImage,
+                        label: "WB",
+                        isActive: expandedPanel == .whiteBalance
+                    ) {
+                        togglePanel(.whiteBalance)
+                    }
+                    
+                    // Center Stage (Face Tracking)
+                    ControlPanelButton(
+                        icon: cameraService.centerStageEnabled ? "person.crop.rectangle.fill" : "person.crop.rectangle",
+                        label: "Track",
+                        isActive: cameraService.centerStageEnabled
+                    ) {
+                        cameraService.toggleCenterStage()
                     }
                 }
                 
-                // Exposure
-                ControlPanelButton(
-                    icon: cameraService.exposureMode.systemImage,
-                    label: "Expo",
-                    isActive: expandedPanel == .exposure
-                ) {
-                    withAnimation(.spring(response: 0.3)) {
-                        expandedPanel = expandedPanel == .exposure ? nil : .exposure
+                // Row 2: Effects & Quality
+                HStack(spacing: 16) {
+                    // Filter
+                    ControlPanelButton(
+                        icon: "camera.filters",
+                        label: cameraService.activeFilter == .none ? "Filter" : cameraService.activeFilter.rawValue,
+                        isActive: cameraService.activeFilter != .none
+                    ) {
+                        showFilterPicker = true
                     }
-                }
-                
-                // White Balance
-                ControlPanelButton(
-                    icon: cameraService.whiteBalanceMode.systemImage,
-                    label: "WB",
-                    isActive: expandedPanel == .whiteBalance
-                ) {
-                    withAnimation(.spring(response: 0.3)) {
-                        expandedPanel = expandedPanel == .whiteBalance ? nil : .whiteBalance
+                    
+                    // Depth (Portrait Mode)
+                    ControlPanelButton(
+                        icon: cameraService.depthEnabled ? "camera.aperture" : "camera.aperture",
+                        label: "Blur",
+                        isActive: expandedPanel == .depth || cameraService.depthEnabled
+                    ) {
+                        togglePanel(.depth)
                     }
-                }
-                
-                // Center Stage (Face Tracking)
-                ControlPanelButton(
-                    icon: cameraService.centerStageEnabled ? "person.crop.rectangle.fill" : "person.crop.rectangle",
-                    label: "Stage",
-                    isActive: cameraService.centerStageEnabled
-                ) {
-                    cameraService.toggleCenterStage()
-                }
-                
-                // Filter
-                ControlPanelButton(
-                    icon: "camera.filters",
-                    label: cameraService.activeFilter == .none ? "Filter" : cameraService.activeFilter.rawValue,
-                    isActive: cameraService.activeFilter != .none
-                ) {
-                    showFilterPicker = true
-                }
-                
-                // Depth (Portrait Mode)
-                ControlPanelButton(
-                    icon: cameraService.depthEnabled ? "camera.aperture" : "camera.aperture",
-                    label: "Blur",
-                    isActive: expandedPanel == .depth || cameraService.depthEnabled
-                ) {
-                    withAnimation(.spring(response: 0.3)) {
-                        expandedPanel = expandedPanel == .depth ? nil : .depth
+                    
+                    // Green Screen
+                    ControlPanelButton(
+                        icon: "person.crop.rectangle.badge.plus",
+                        label: "Green",
+                        isActive: cameraService.greenScreenEnabled
+                    ) {
+                        cameraService.greenScreenEnabled.toggle()
                     }
-                }
-                
-                // Quality
-                ControlPanelButton(
-                    icon: "video.fill",
-                    label: cameraService.videoQuality.rawValue,
-                    isActive: expandedPanel == .quality
-                ) {
-                    withAnimation(.spring(response: 0.3)) {
-                        expandedPanel = expandedPanel == .quality ? nil : .quality
+                    
+                    // Quality
+                    ControlPanelButton(
+                        icon: "video.fill",
+                        label: cameraService.videoQuality.rawValue,
+                        isActive: expandedPanel == .quality
+                    ) {
+                        togglePanel(.quality)
                     }
                 }
             }
@@ -98,11 +103,18 @@ struct CameraControlsOverlay: View {
             .padding(.vertical, 12)
             .background(.ultraThinMaterial)
             .clipShape(RoundedRectangle(cornerRadius: 16))
+            .padding(.horizontal, 16)
         }
         .padding(.horizontal, 16)
         .sheet(isPresented: $showFilterPicker) {
             FilterPickerSheet(selectedFilter: $cameraService.activeFilter)
                 .presentationDetents([.medium])
+        }
+    }
+    
+    private func togglePanel(_ panel: ControlPanel) {
+        withAnimation(.spring(response: 0.3)) {
+            expandedPanel = expandedPanel == panel ? nil : panel
         }
     }
     

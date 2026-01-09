@@ -32,7 +32,7 @@ struct RecordingView: View {
             // Uses its own GeometryReader to capture full device dimensions for focus/aspect ratio
             GeometryReader { fullGeo in
                 ZStack {
-                    if (cameraService.depthEnabled || cameraService.activeFilter != .none), 
+                    if (cameraService.depthEnabled || cameraService.greenScreenEnabled || cameraService.activeFilter != .none), 
                        let processedImage = cameraService.processedPreviewImage {
                         MetalPreviewView(ciImage: processedImage)
                             .ignoresSafeArea()

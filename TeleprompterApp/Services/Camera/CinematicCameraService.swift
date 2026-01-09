@@ -60,13 +60,32 @@ class CinematicCameraService: NSObject, ObservableObject {
     // MARK: - Depth (Portrait Mode)
     
     @Published var depthEnabled = false {
-        didSet { 
-            depthProcessor.isEnabled = depthEnabled
-            print("⚙️ Depth enabled: \(depthEnabled), processor.isEnabled: \(depthProcessor.isEnabled)")
-            // No session reconfiguration needed for Vision-based blur
+        didSet {
+            if depthEnabled {
+                greenScreenEnabled = false // Mutually exclusive
+                depthProcessor.effectMode = .blur
+                depthProcessor.isEnabled = true
+            } else if !greenScreenEnabled {
+                // Only disable if green screen is also off
+                depthProcessor.isEnabled = false
+            }
         }
     }
-    @Published var simulatedAperture: Float = 2.8 {
+    
+    @Published var greenScreenEnabled = false {
+        didSet {
+            if greenScreenEnabled {
+                depthEnabled = false // Mutually exclusive
+                depthProcessor.effectMode = .greenScreen
+                depthProcessor.isEnabled = true
+            } else if !depthEnabled {
+                // Only disable if blur is also off
+                depthProcessor.isEnabled = false
+            }
+        }
+    }
+    
+    @Published var simulatedAperture: Float = 13.0 {
         didSet { 
             depthProcessor.aperture = simulatedAperture
             applyAperture() 
@@ -80,7 +99,7 @@ class CinematicCameraService: NSObject, ObservableObject {
     
     // MARK: - Center Stage (Face Tracking)
     
-    @Published var centerStageEnabled = false {
+    @Published var centerStageEnabled = true {
         didSet { applyCenterStage() }
     }
     @Published private(set) var isCenterStageSupported = false
@@ -981,8 +1000,8 @@ extension CinematicCameraService: AVCaptureVideoDataOutputSampleBufferDelegate, 
             
             var ciImage = CIImage(cvPixelBuffer: pixelBuffer)
             
-            // 1. Apply Depth Blur (if enabled)
-            // We do this BEFORE consumers (preview/writer) so everyone sees the blur
+            // 1. Apply Vision Effects (Blur or Green Screen)
+            // The processor handles the mode internaly based on configuration
             if self.depthProcessor.isEnabled {
                 // Pass nil for depthData since we are using Vision segmentation
                 if let processedImage = self.depthProcessor.processFrame(videoBuffer: sampleBuffer, depthData: nil) {
