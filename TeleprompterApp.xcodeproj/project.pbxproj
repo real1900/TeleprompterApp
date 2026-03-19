@@ -7,6 +7,8 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		15C2D101C27F901EB1FCC5D1 /* RecordingGalleryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A537E514DE0B8AD72BBCA546 /* RecordingGalleryView.swift */; };
+		1A6E81C2148F617B50157CCE /* DesignSystem.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2644F7F55FF980DD7E44299 /* DesignSystem.swift */; };
 		70C20CF15AF6D18C750761D3 /* MetalPreviewView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 058AA3267C9661242F7E9FF2 /* MetalPreviewView.swift */; };
 		APP001 /* TeleprompterApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = SRC001 /* TeleprompterApp.swift */; };
 		APP002 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = SRC002 /* ContentView.swift */; };
@@ -32,8 +34,10 @@
 
 /* Begin PBXFileReference section */
 		058AA3267C9661242F7E9FF2 /* MetalPreviewView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MetalPreviewView.swift; sourceTree = "<group>"; };
+		4B08A65D6B8F354C05E22CBC /* Package.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = Package.swift; sourceTree = "<group>"; };
 		9E474412F7A090EC3C26161A /* DepthBlurProcessor.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = DepthBlurProcessor.swift; sourceTree = "<group>"; };
-		PRODUCT /* TeleprompterApp.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = TeleprompterApp.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		A537E514DE0B8AD72BBCA546 /* RecordingGalleryView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = RecordingGalleryView.swift; sourceTree = "<group>"; };
+		D2644F7F55FF980DD7E44299 /* DesignSystem.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = Common/DesignSystem.swift; sourceTree = "<group>"; };
 		RES_ASSETS /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		RES_INFO /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		SRC001 /* TeleprompterApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TeleprompterApp.swift; sourceTree = "<group>"; };
@@ -67,6 +71,14 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		33CBFB2278A90001DD3AD2EA /* Common */ = {
+			isa = PBXGroup;
+			children = (
+				D2644F7F55FF980DD7E44299 /* DesignSystem.swift */,
+			);
+			name = Common;
+			sourceTree = "<group>";
+		};
 		APP_GROUP /* App */ = {
 			isa = PBXGroup;
 			children = (
@@ -94,6 +106,7 @@
 				VIEWS_GROUP /* Views */,
 				SERVICES_GROUP /* Services */,
 				RESOURCES_GROUP /* Resources */,
+				4B08A65D6B8F354C05E22CBC /* Package.swift */,
 			);
 			path = TeleprompterApp;
 			sourceTree = "<group>";
@@ -119,7 +132,6 @@
 		PRODUCTS_GROUP /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				PRODUCT /* TeleprompterApp.app */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -134,6 +146,7 @@
 				SRC022 /* CameraControlsOverlay.swift */,
 				SRC023 /* FocusIndicatorView.swift */,
 				058AA3267C9661242F7E9FF2 /* MetalPreviewView.swift */,
+				A537E514DE0B8AD72BBCA546 /* RecordingGalleryView.swift */,
 			);
 			path = Recording;
 			sourceTree = "<group>";
@@ -196,6 +209,7 @@
 				RECORDING_GROUP /* Recording */,
 				SCRIPTEDITOR_GROUP /* ScriptEditor */,
 				SETTINGS_GROUP /* Settings */,
+				33CBFB2278A90001DD3AD2EA /* Common */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -217,7 +231,6 @@
 			);
 			name = TeleprompterApp;
 			productName = TeleprompterApp;
-			productReference = PRODUCT /* TeleprompterApp.app */;
 			productType = "com.apple.product-type.application";
 		};
 /* End PBXNativeTarget section */
@@ -289,6 +302,8 @@
 				VW009 /* FocusIndicatorView.swift in Sources */,
 				EE82A7561ACF9D486AE7420C /* DepthBlurProcessor.swift in Sources */,
 				70C20CF15AF6D18C750761D3 /* MetalPreviewView.swift in Sources */,
+				15C2D101C27F901EB1FCC5D1 /* RecordingGalleryView.swift in Sources */,
+				1A6E81C2148F617B50157CCE /* DesignSystem.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
