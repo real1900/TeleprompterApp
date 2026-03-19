@@ -1,4 +1,4 @@
-# 🎬 GoPrompt: Professional Cinematic Teleprompter
+# <img src="assets/app_icon.png" width="36" style="border-radius: 8px;" align="top" /> GoPrompt: Professional Cinematic Teleprompter
 
 > [!WARNING]
 > **PROPRIETARY SOURCE CODE**
@@ -160,4 +160,4 @@ You are granted **read-only access** to view the source code. You are explicitly
 - Using any components, UI paradigms, or architectural patterns described herein in your own projects.
 - Submitting this application or any derivative works to the Apple App Store or any other distribution platform.
 
-Any unauthorized use, reproduction, or distribution of this code will be subject to strict legal action under intellectual property and copyright laws.
+Any unauthorized use, reproduction, or distribution of this code will be subject to strict legal action under intellectual property and copyright laws. 
