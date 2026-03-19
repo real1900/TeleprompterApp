@@ -18,7 +18,6 @@ struct TeleprompterOverlay: View {
     var body: some View {
         GeometryReader { geometry in
             let columnWidth = geometry.size.width * textColumnWidthRatio
-            let activeZoneHeight = geometry.size.height * activeZoneRatio
             let landscapeColumnWidth = geometry.size.width * 0.95 // Nearly full width in landscape container
             
             ZStack(alignment: isLandscape ? .leading : .top) {

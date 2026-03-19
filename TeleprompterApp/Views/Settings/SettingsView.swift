@@ -1,9 +1,9 @@
 import SwiftUI
 
 /// Full settings screen with all teleprompter configuration options
+/// Updated to match the high-fidelity native Stitch GoPrompt UI.
 struct SettingsView: View {
     @EnvironmentObject var appState: AppState
-    
     @State private var showingResetAlert = false
     
     var body: some View {
@@ -12,67 +12,181 @@ struct SettingsView: View {
                 DesignSystem.Colors.background.ignoresSafeArea()
                 
                 ScrollView {
-                    VStack(spacing: 24) {
-                        // Text Settings
-                        settingsSection(title: "Text", footer: "Adjust the font size and line spacing to match your reading comfort.") {
-                            fontSizeRow
-                            Divider().background(Color.white.opacity(0.1))
-                            lineSpacingRow
-                            Divider().background(Color.white.opacity(0.1))
-                            textColorRow
-                        }
+                    VStack(alignment: .leading, spacing: 32) {
                         
-                        // Scrolling Settings
-                        settingsSection(title: "Scrolling", footer: "Slower speeds are better for beginners. The teleprompter pauses when you tap during recording.") {
-                            scrollSpeedRow
+                        // Screen Header matching Stitch HTML
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Settings")
+                                .font(DesignSystem.Typography.largeTitle)
+                                .foregroundColor(DesignSystem.Colors.primaryText)
+                            Text("Configuration & Performance")
+                                .font(DesignSystem.Typography.label)
+                                .foregroundColor(DesignSystem.Colors.secondaryText)
+                                .textCase(.uppercase)
+                                .tracking(2.0)
                         }
+                        .padding(.top, 24)
                         
-                        // Appearance Settings
-                        settingsSection(title: "Appearance") {
-                            backgroundOpacityRow
-                            Divider().background(Color.white.opacity(0.1))
-                            mirrorTextRow
-                        }
-                        
-                        // Recording Settings
-                        settingsSection(title: "Recording") {
-                            countdownToggle
-                            if appState.settings.showCountdown {
-                                Divider().background(Color.white.opacity(0.1))
-                                countdownDurationRow
-                            }
-                        }
-                        
-                        // Reset Settings
-                        settingsSection(title: "Reset") {
-                            Button(role: .destructive) {
-                                showingResetAlert = true
-                            } label: {
-                                HStack {
-                                    Spacer()
-                                    Text("Reset to Defaults")
-                                        .bold()
-                                    Spacer()
+                        // Prompter Settings Section
+                        settingsSection(title: "Prompter Settings") {
+                            VStack(spacing: 0) {
+                                SettingsRow(
+                                    icon: "arrow.left.and.right.righttriangle.left.righttriangle.right",
+                                    title: "Mirroring",
+                                    subtitle: "Horizontal Reflection",
+                                    isLast: false
+                                ) {
+                                    Toggle("", isOn: $appState.settings.mirrorText)
+                                        .labelsHidden()
+                                        .tint(DesignSystem.Colors.accentContainer)
+                                }
+                                
+                                SettingsRow(
+                                    icon: "speedometer",
+                                    title: "Speed",
+                                    subtitle: "Words per minute",
+                                    isLast: false
+                                ) {
+                                    Stepper(value: $appState.settings.scrollSpeed, in: TeleprompterSettings.scrollSpeedRange, step: 5) {
+                                        Text("\(Int(appState.settings.scrollSpeed)) WPM")
+                                            .font(DesignSystem.Typography.label)
+                                            .foregroundColor(DesignSystem.Colors.secondary)
+                                            .bold()
+                                    }
+                                    .labelsHidden()
+                                    .frame(width: 100)
+                                    .overlay(alignment: .leading) {
+                                        Text("\(Int(appState.settings.scrollSpeed)) WPM")
+                                            .font(DesignSystem.Typography.label)
+                                            .foregroundColor(DesignSystem.Colors.secondary)
+                                            .bold()
+                                            .offset(x: -60)
+                                    }
+                                }
+                                
+                                SettingsRow(
+                                    icon: "textformat.size",
+                                    title: "Font Size",
+                                    subtitle: "Optimal reading scale",
+                                    isLast: true
+                                ) {
+                                    Stepper(value: $appState.settings.fontSize, in: TeleprompterSettings.fontSizeRange, step: 2) {
+                                        Text("\(Int(appState.settings.fontSize))pt")
+                                    }
+                                    .labelsHidden()
+                                    .frame(width: 100)
+                                    .overlay(alignment: .leading) {
+                                        Text("\(Int(appState.settings.fontSize))pt")
+                                            .font(DesignSystem.Typography.label)
+                                            .foregroundColor(DesignSystem.Colors.secondaryText)
+                                            .offset(x: -50)
+                                    }
                                 }
                             }
                         }
                         
-                        // App Info
-                        settingsSection(title: "About") {
-                            HStack {
-                                Text("Version")
-                                Spacer()
-                                Text("1.0.0")
-                                    .foregroundColor(DesignSystem.Colors.secondaryText)
+                        // Camera Settings Section
+                        settingsSection(title: "Camera Settings") {
+                            VStack(spacing: 0) {
+                                SettingsRow(
+                                    icon: "4k.tv",
+                                    title: "Resolution",
+                                    subtitle: "4K UHD High Dynamic Range",
+                                    isLast: false
+                                ) {
+                                    HStack(spacing: 8) {
+                                        Text("PRO")
+                                            .font(.system(size: 10, weight: .bold))
+                                            .padding(.horizontal, 6)
+                                            .padding(.vertical, 2)
+                                            .background(DesignSystem.Colors.secondaryContainer.opacity(0.2))
+                                            .foregroundColor(DesignSystem.Colors.secondary)
+                                            .cornerRadius(4)
+                                        
+                                        Image(systemName: "chevron.right")
+                                            .font(.system(size: 12, weight: .semibold))
+                                            .foregroundColor(DesignSystem.Colors.secondaryText)
+                                    }
+                                }
+                                
+                                SettingsRow(
+                                    icon: "camera.aperture",
+                                    title: "Frame Rate",
+                                    subtitle: "Cinematic Standard",
+                                    isLast: false
+                                ) {
+                                    Text("24 FPS")
+                                        .font(DesignSystem.Typography.label)
+                                        .foregroundColor(DesignSystem.Colors.secondaryText)
+                                }
+                                
+                                SettingsRow(
+                                    icon: "video.badge.checkmark",
+                                    title: "Stabilization",
+                                    subtitle: "Digital Gimbal Mode",
+                                    isLast: true
+                                ) {
+                                    Toggle("", isOn: .constant(false))
+                                        .labelsHidden()
+                                        .tint(DesignSystem.Colors.accentContainer)
+                                }
                             }
                         }
+                        
+                        // Account Section
+                        settingsSection(title: "Account") {
+                            VStack(spacing: 0) {
+                                SettingsRow(
+                                    icon: "person.crop.circle",
+                                    title: "Profile",
+                                    subtitle: "Director ID: #8829",
+                                    isLast: false
+                                ) {
+                                    Image(systemName: "chevron.right")
+                                        .font(.system(size: 12, weight: .semibold))
+                                        .foregroundColor(DesignSystem.Colors.secondaryText)
+                                }
+                                
+                                SettingsRow(
+                                    icon: "rosette",
+                                    title: "Subscription",
+                                    subtitle: "Obsidian Elite • Active",
+                                    iconColor: DesignSystem.Colors.secondary,
+                                    isLast: true
+                                ) {
+                                    Text("MANAGE")
+                                        .font(DesignSystem.Typography.label)
+                                        .foregroundColor(DesignSystem.Colors.secondary)
+                                        .tracking(1.0)
+                                }
+                            }
+                        }
+                        
+                        // Footer
+                        VStack(spacing: 8) {
+                            Text("GOPROMPT BUILD V1.0.0")
+                                .font(.system(size: 10, weight: .medium, design: .default))
+                                .foregroundColor(DesignSystem.Colors.secondaryText.opacity(0.4))
+                                .tracking(2.0)
+                            
+                            Button(action: {
+                                showingResetAlert = true
+                            }) {
+                                Text("RESET SETTINGS")
+                                    .font(.system(size: 12, weight: .semibold, design: .default))
+                                    .foregroundColor(DesignSystem.Colors.destructive)
+                                    .tracking(1.0)
+                            }
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(.top, 16)
+                        .padding(.bottom, 100)
                     }
-                    .padding(DesignSystem.Layout.paddingStandard)
+                    .padding(.horizontal, DesignSystem.Layout.paddingLarge)
                 }
             }
-            .navigationTitle("Settings")
-            .navigationBarTitleDisplayMode(.large)
-            .preferredColorScheme(.dark)
+            // Hide default nav bar since we use custom Stitch header styles internally if needed
+            .navigationBarHidden(true)
             .alert("Reset Settings?", isPresented: $showingResetAlert) {
                 Button("Cancel", role: .cancel) {}
                 Button("Reset", role: .destructive) {
@@ -88,170 +202,71 @@ struct SettingsView: View {
         }
     }
     
-    // MARK: - Section Helper
+    // MARK: - Section Container
     
-    private func settingsSection<Content: View>(title: String, footer: String? = nil, @ViewBuilder content: () -> Content) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(title.uppercased())
-                .font(DesignSystem.Typography.caption)
-                .foregroundColor(DesignSystem.Colors.secondaryText)
-                .padding(.leading, 8)
+    @ViewBuilder
+    private func settingsSection<Content: View>(title: String, @ViewBuilder content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text(title)
+                .font(.system(size: 12, weight: .semibold, design: .default))
+                .foregroundColor(DesignSystem.Colors.secondary)
+                .textCase(.uppercase)
+                .tracking(1.0)
+                .padding(.leading, 4)
             
-            VStack(spacing: 16) {
-                content()
-            }
-            .padding(DesignSystem.Layout.paddingStandard)
-            .glassPanel(cornerRadius: DesignSystem.Layout.cornerRadiusStandard)
-            
-            if let footer = footer {
-                Text(footer)
-                    .font(.caption2)
-                    .foregroundColor(DesignSystem.Colors.secondaryText)
-                    .padding(.leading, 8)
-            }
+            content()
+                .glassPanel(cornerRadius: DesignSystem.Layout.cornerRadiusStandard)
         }
     }
+}
+
+// MARK: - Custom List Row for Settings
+struct SettingsRow<Action: View>: View {
+    let icon: String
+    let title: String
+    let subtitle: String
+    var iconColor: Color = DesignSystem.Colors.accent
+    let isLast: Bool
+    @ViewBuilder let action: () -> Action
     
-    // MARK: - Row Views
-    
-    private var fontSizeRow: some View {
-        VStack(alignment: .leading) {
-            HStack {
-                Text("Font Size")
-                Spacer()
-                Text("\(Int(appState.settings.fontSize)) pt")
-                    .foregroundColor(.secondary)
-                    .monospacedDigit()
-            }
-            
-            Slider(
-                value: $appState.settings.fontSize,
-                in: TeleprompterSettings.fontSizeRange,
-                step: 2
-            ) {
-                Text("Font Size")
-            } minimumValueLabel: {
-                Text("A")
-                    .font(.caption)
-            } maximumValueLabel: {
-                Text("A")
-                    .font(.title2)
-            }
-        }
-    }
-    
-    private var lineSpacingRow: some View {
-        VStack(alignment: .leading) {
-            HStack {
-                Text("Line Spacing")
-                Spacer()
-                Text("\(Int(appState.settings.lineSpacing)) pt")
-                    .foregroundColor(.secondary)
-                    .monospacedDigit()
-            }
-            
-            Slider(
-                value: $appState.settings.lineSpacing,
-                in: 0...24,
-                step: 2
-            )
-        }
-    }
-    
-    private var textColorRow: some View {
-        ColorPicker("Text Color", selection: Binding(
-            get: { appState.settings.textColor },
-            set: { newColor in
-                if let hex = newColor.toHex() {
-                    appState.settings.textColorHex = hex
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 16) {
+                // Icon Box
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .fill(DesignSystem.Colors.surfaceHighest)
+                    .frame(width: 40, height: 40)
+                    .overlay(
+                        Image(systemName: icon)
+                            .font(.system(size: 16, weight: .medium))
+                            .foregroundColor(iconColor)
+                    )
+                
+                // Text
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(title)
+                        .font(DesignSystem.Typography.headline)
+                        .foregroundColor(DesignSystem.Colors.primaryText)
+                    Text(subtitle)
+                        .font(DesignSystem.Typography.caption)
+                        .foregroundColor(DesignSystem.Colors.secondaryText)
                 }
-            }
-        ))
-    }
-    
-    private var scrollSpeedRow: some View {
-        VStack(alignment: .leading) {
-            HStack {
-                Text("Scroll Speed")
+                
                 Spacer()
-                Text(speedLabel)
-                    .foregroundColor(.secondary)
+                
+                // Right Action View
+                action()
             }
+            .padding(20)
             
-            Slider(
-                value: $appState.settings.scrollSpeed,
-                in: TeleprompterSettings.scrollSpeedRange,
-                step: 5
-            ) {
-                Text("Speed")
-            } minimumValueLabel: {
-                Image(systemName: "tortoise")
-                    .font(.caption)
-            } maximumValueLabel: {
-                Image(systemName: "hare")
-                    .font(.caption)
+            if !isLast {
+                Divider()
+                    .background(Color.white.opacity(0.05))
+                    .padding(.horizontal, 20)
             }
         }
-    }
-    
-    private var speedLabel: String {
-        let speed = appState.settings.scrollSpeed
-        if speed < 40 {
-            return "Slow"
-        } else if speed < 80 {
-            return "Normal"
-        } else if speed < 140 {
-            return "Fast"
-        } else {
-            return "Very Fast"
-        }
-    }
-    
-    private var backgroundOpacityRow: some View {
-        VStack(alignment: .leading) {
-            HStack {
-                Text("Background Opacity")
-                Spacer()
-                Text("\(Int(appState.settings.backgroundOpacity * 100))%")
-                    .foregroundColor(.secondary)
-                    .monospacedDigit()
-            }
-            
-            Slider(
-                value: $appState.settings.backgroundOpacity,
-                in: TeleprompterSettings.opacityRange
-            )
-            
-            // Preview
-            HStack {
-                Spacer()
-                Text("Preview")
-                    .font(.caption)
-                    .foregroundColor(appState.settings.textColor)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 6)
-                    .background(appState.settings.backgroundColor)
-                    .clipShape(RoundedRectangle(cornerRadius: 6))
-                Spacer()
-            }
-            .padding(.top, 8)
-        }
-    }
-    
-    private var mirrorTextRow: some View {
-        Toggle("Mirror Text", isOn: $appState.settings.mirrorText)
-    }
-    
-    private var countdownToggle: some View {
-        Toggle("Show Countdown", isOn: $appState.settings.showCountdown)
-    }
-    
-    private var countdownDurationRow: some View {
-        Stepper(
-            "Countdown: \(appState.settings.countdownDuration) seconds",
-            value: $appState.settings.countdownDuration,
-            in: 1...10
-        )
+        // Hover/Active effect placeholder
+        .contentShape(Rectangle())
     }
 }
 

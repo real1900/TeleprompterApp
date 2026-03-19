@@ -1,5 +1,5 @@
 import Foundation
-import AVFoundation
+@preconcurrency import AVFoundation
 import CoreMedia
 import Photos
 import Combine
@@ -121,16 +121,16 @@ class CinematicCameraService: NSObject, ObservableObject {
     
     // MARK: - AVFoundation Components
     
-    let captureSession = AVCaptureSession()
-    private var videoDeviceInput: AVCaptureDeviceInput?
-    private var audioDeviceInput: AVCaptureDeviceInput?
-    private let movieFileOutput = AVCaptureMovieFileOutput()
+    nonisolated(unsafe) let captureSession = AVCaptureSession()
+    nonisolated(unsafe) private var videoDeviceInput: AVCaptureDeviceInput?
+    nonisolated(unsafe) private var audioDeviceInput: AVCaptureDeviceInput?
+    nonisolated(unsafe) private let movieFileOutput = AVCaptureMovieFileOutput()
     
     // Depth capturing components REMOVED for Center Stage compatibility
     // Vision-based blur uses standard video frames
     
-    private var videoDataOutput: AVCaptureVideoDataOutput?
-    private var audioDataOutput: AVCaptureAudioDataOutput?
+    nonisolated(unsafe) private var videoDataOutput: AVCaptureVideoDataOutput?
+    nonisolated(unsafe) private var audioDataOutput: AVCaptureAudioDataOutput?
     
     // Depth processing
     let depthProcessor = DepthBlurProcessor()
@@ -218,15 +218,11 @@ class CinematicCameraService: NSObject, ObservableObject {
             throw CameraError.permissionDenied
         }
         
+        let quality = videoQuality
         try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
-            sessionQueue.async { [weak self] in
-                guard let self else {
-                    continuation.resume(throwing: CameraError.setupFailed(NSError(domain: "CinematicCamera", code: -1)))
-                    return
-                }
-                
+            sessionQueue.async { [self] in
                 do {
-                    try self.setupSession()
+                    try self.setupSession(quality: quality)
                     continuation.resume()
                 } catch {
                     continuation.resume(throwing: error)
@@ -235,10 +231,10 @@ class CinematicCameraService: NSObject, ObservableObject {
         }
     }
     
-    private func setupSession() throws {
+    nonisolated private func setupSession(quality: VideoQuality) throws {
         // Configure Audio Session for recording
         do {
-            try AVAudioSession.sharedInstance().setCategory(.playAndRecord, mode: .videoRecording, options: [.defaultToSpeaker, .allowBluetooth])
+            try AVAudioSession.sharedInstance().setCategory(.playAndRecord, mode: .videoRecording, options: [.defaultToSpeaker, .allowBluetoothHFP])
             try AVAudioSession.sharedInstance().setActive(true)
         } catch {
             print("⚠️ Audio session configuration failed: \(error)")
@@ -247,8 +243,8 @@ class CinematicCameraService: NSObject, ObservableObject {
         captureSession.beginConfiguration()
         defer { captureSession.commitConfiguration() }
         
-        if captureSession.canSetSessionPreset(videoQuality.sessionPreset) {
-            captureSession.sessionPreset = videoQuality.sessionPreset
+        if captureSession.canSetSessionPreset(quality.sessionPreset) {
+            captureSession.sessionPreset = quality.sessionPreset
         } else {
             captureSession.sessionPreset = .high
         }
@@ -328,8 +324,8 @@ class CinematicCameraService: NSObject, ObservableObject {
                     connection.isVideoMirrored = true
                 }
                 
-                // Set initial orientation
-                self.updateConnectionOrientation(connection, to: UIDevice.current.orientation)
+                // Set initial orientation to portrait
+                self.updateConnectionOrientation(connection, to: .portrait)
             }
         }
         
@@ -355,23 +351,25 @@ class CinematicCameraService: NSObject, ObservableObject {
     // MARK: - Session Control
     
     func startSession() {
+        let session = captureSession
         sessionQueue.async { [weak self] in
-            guard let self, !self.captureSession.isRunning else { return }
-            self.captureSession.startRunning()
+            guard !session.isRunning else { return }
+            session.startRunning()
             
             Task { @MainActor in
-                self.isSessionRunning = true
+                self?.isSessionRunning = true
             }
         }
     }
     
     func stopSession() {
+        let session = captureSession
         sessionQueue.async { [weak self] in
-            guard let self, self.captureSession.isRunning else { return }
-            self.captureSession.stopRunning()
+            guard session.isRunning else { return }
+            session.stopRunning()
             
             Task { @MainActor in
-                self.isSessionRunning = false
+                self?.isSessionRunning = false
             }
         }
     }
@@ -410,12 +408,14 @@ class CinematicCameraService: NSObject, ObservableObject {
     
     private func applyFocusMode() {
         guard let device = videoDeviceInput?.device else { return }
+        let currentFocusMode = focusMode
+        let currentFocusPosition = focusPosition
         
         sessionQueue.async {
             do {
                 try device.lockForConfiguration()
                 
-                switch self.focusMode {
+                switch currentFocusMode {
                 case .locked:
                     device.focusMode = .locked
                 case .autoFocus:
@@ -428,7 +428,7 @@ class CinematicCameraService: NSObject, ObservableObject {
                     }
                 case .manual:
                     device.focusMode = .locked
-                    device.setFocusModeLocked(lensPosition: self.focusPosition)
+                    device.setFocusModeLocked(lensPosition: currentFocusPosition)
                 }
                 
                 device.unlockForConfiguration()
@@ -440,11 +440,12 @@ class CinematicCameraService: NSObject, ObservableObject {
     
     private func applyManualFocus() {
         guard let device = videoDeviceInput?.device else { return }
+        let currentFocusPosition = focusPosition
         
         sessionQueue.async {
             do {
                 try device.lockForConfiguration()
-                device.setFocusModeLocked(lensPosition: self.focusPosition)
+                device.setFocusModeLocked(lensPosition: currentFocusPosition)
                 device.unlockForConfiguration()
             } catch {
                 print("Manual focus error: \(error)")
@@ -456,12 +457,15 @@ class CinematicCameraService: NSObject, ObservableObject {
     
     private func applyExposureMode() {
         guard let device = videoDeviceInput?.device else { return }
+        let currentExposureMode = exposureMode
+        let currentShutterSpeed = shutterSpeed
+        let currentISO = iso
         
         sessionQueue.async {
             do {
                 try device.lockForConfiguration()
                 
-                switch self.exposureMode {
+                switch currentExposureMode {
                 case .locked:
                     device.exposureMode = .locked
                 case .autoExpose:
@@ -474,8 +478,8 @@ class CinematicCameraService: NSObject, ObservableObject {
                     }
                 case .manual:
                     if device.isExposureModeSupported(.custom) {
-                        let duration = CMTime(seconds: self.shutterSpeed, preferredTimescale: 1000000)
-                        device.setExposureModeCustom(duration: duration, iso: self.iso)
+                        let duration = CMTime(seconds: currentShutterSpeed, preferredTimescale: 1000000)
+                        device.setExposureModeCustom(duration: duration, iso: currentISO)
                     }
                 }
                 
@@ -488,11 +492,12 @@ class CinematicCameraService: NSObject, ObservableObject {
     
     private func applyExposureCompensation() {
         guard let device = videoDeviceInput?.device else { return }
+        let currentExposureCompensation = exposureCompensation
         
         sessionQueue.async {
             do {
                 try device.lockForConfiguration()
-                device.setExposureTargetBias(self.exposureCompensation)
+                device.setExposureTargetBias(currentExposureCompensation)
                 device.unlockForConfiguration()
             } catch {
                 print("Exposure compensation error: \(error)")
@@ -503,12 +508,14 @@ class CinematicCameraService: NSObject, ObservableObject {
     private func applyManualExposure() {
         guard let device = videoDeviceInput?.device,
               device.isExposureModeSupported(.custom) else { return }
+        let currentShutterSpeed = shutterSpeed
+        let currentISO = iso
         
         sessionQueue.async {
             do {
                 try device.lockForConfiguration()
-                let duration = CMTime(seconds: self.shutterSpeed, preferredTimescale: 1000000)
-                let clampedISO = min(max(self.iso, device.activeFormat.minISO), device.activeFormat.maxISO)
+                let duration = CMTime(seconds: currentShutterSpeed, preferredTimescale: 1000000)
+                let clampedISO = min(max(currentISO, device.activeFormat.minISO), device.activeFormat.maxISO)
                 device.setExposureModeCustom(duration: duration, iso: clampedISO)
                 device.unlockForConfiguration()
             } catch {
@@ -521,12 +528,13 @@ class CinematicCameraService: NSObject, ObservableObject {
     
     private func applyWhiteBalance() {
         guard let device = videoDeviceInput?.device else { return }
+        let currentWhiteBalanceMode = whiteBalanceMode
         
-        sessionQueue.async {
+        sessionQueue.async { [self] in
             do {
                 try device.lockForConfiguration()
                 
-                switch self.whiteBalanceMode {
+                switch currentWhiteBalanceMode {
                 case .auto:
                     if device.isWhiteBalanceModeSupported(.continuousAutoWhiteBalance) {
                         device.whiteBalanceMode = .continuousAutoWhiteBalance
@@ -534,7 +542,7 @@ class CinematicCameraService: NSObject, ObservableObject {
                 case .locked:
                     device.whiteBalanceMode = .locked
                 default:
-                    let tempTint = self.whiteBalanceMode.temperatureAndTint
+                    let tempTint = currentWhiteBalanceMode.temperatureAndTint
                     let gains = device.deviceWhiteBalanceGains(for: AVCaptureDevice.WhiteBalanceTemperatureAndTintValues(
                         temperature: tempTint.temperature,
                         tint: tempTint.tint
@@ -552,13 +560,15 @@ class CinematicCameraService: NSObject, ObservableObject {
     
     private func applyManualWhiteBalance() {
         guard let device = videoDeviceInput?.device else { return }
+        let currentColorTemperature = colorTemperature
+        let currentTint = tint
         
-        sessionQueue.async {
+        sessionQueue.async { [self] in
             do {
                 try device.lockForConfiguration()
                 let gains = device.deviceWhiteBalanceGains(for: AVCaptureDevice.WhiteBalanceTemperatureAndTintValues(
-                    temperature: self.colorTemperature,
-                    tint: self.tint
+                    temperature: currentColorTemperature,
+                    tint: currentTint
                 ))
                 let normalizedGains = self.normalizeGains(gains, for: device)
                 device.setWhiteBalanceModeLocked(with: normalizedGains)
@@ -569,7 +579,7 @@ class CinematicCameraService: NSObject, ObservableObject {
         }
     }
     
-    private func normalizeGains(_ gains: AVCaptureDevice.WhiteBalanceGains, for device: AVCaptureDevice) -> AVCaptureDevice.WhiteBalanceGains {
+    nonisolated private func normalizeGains(_ gains: AVCaptureDevice.WhiteBalanceGains, for device: AVCaptureDevice) -> AVCaptureDevice.WhiteBalanceGains {
         var g = gains
         let maxGain = device.maxWhiteBalanceGain
         g.redGain = min(max(1.0, g.redGain), maxGain)
@@ -581,40 +591,45 @@ class CinematicCameraService: NSObject, ObservableObject {
     // MARK: - Video Quality
     
     private func applyVideoQuality() {
-        sessionQueue.async { [weak self] in
-            guard let self else { return }
-            
-            self.captureSession.beginConfiguration()
-            if self.captureSession.canSetSessionPreset(self.videoQuality.sessionPreset) {
-                self.captureSession.sessionPreset = self.videoQuality.sessionPreset
+        let session = captureSession
+        let preset = videoQuality.sessionPreset
+        
+        sessionQueue.async {
+            session.beginConfiguration()
+            if session.canSetSessionPreset(preset) {
+                session.sessionPreset = preset
             }
-            self.captureSession.commitConfiguration()
+            session.commitConfiguration()
         }
     }
     
     // MARK: - Orientation Control
     
     func updateVideoOrientation(_ orientation: UIDeviceOrientation) {
-        sessionQueue.async { [weak self] in
-            guard let self, let connection = self.videoDataOutput?.connection(with: .video) else { return }
+        let output = videoDataOutput
+        sessionQueue.async { [self] in
+            guard let connection = output?.connection(with: .video) else { return }
             self.updateConnectionOrientation(connection, to: orientation)
         }
     }
     
-    private func updateConnectionOrientation(_ connection: AVCaptureConnection, to orientation: UIDeviceOrientation) {
-        guard connection.isVideoOrientationSupported else { return }
-        
+    nonisolated private func updateConnectionOrientation(_ connection: AVCaptureConnection, to orientation: UIDeviceOrientation) {
+        let angle: CGFloat
         switch orientation {
         case .portrait:
-            connection.videoOrientation = .portrait
+            angle = 90
         case .landscapeLeft:
-            connection.videoOrientation = .landscapeRight // Inverted for front camera
+            angle = 180 // Inverted for front camera
         case .landscapeRight:
-            connection.videoOrientation = .landscapeLeft // Inverted for front camera
+            angle = 0 // Inverted for front camera
         case .portraitUpsideDown:
-            connection.videoOrientation = .portraitUpsideDown
+            angle = 270
         default:
-            break
+            return
+        }
+        
+        if connection.isVideoRotationAngleSupported(angle) {
+            connection.videoRotationAngle = angle
         }
     }
 
@@ -684,16 +699,18 @@ class CinematicCameraService: NSObject, ObservableObject {
             isWritingProcessedVideo = true
         } else {
             // Use standard movie file output for non-depth recording
+            let output = movieFileOutput
             sessionQueue.async { [weak self] in
-                self?.movieFileOutput.startRecording(to: outputURL, recordingDelegate: self!)
+                guard let self else { return }
+                output.startRecording(to: outputURL, recordingDelegate: self)
             }
         }
         
-        recordingStartTime = Date()
+        let startTime = Date()
+        recordingStartTime = startTime
         recordingTimer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in
-            guard let self, let startTime = self.recordingStartTime else { return }
             Task { @MainActor in
-                self.recordingDuration = Date().timeIntervalSince(startTime)
+                self?.recordingDuration = Date().timeIntervalSince(startTime)
             }
         }
         
@@ -848,10 +865,11 @@ class CinematicCameraService: NSObject, ObservableObject {
             return try await finishAssetWriterRecording()
         } else {
             print("📹 stopRecording: Using movieFileOutput path")
+            let output = movieFileOutput
             return try await withCheckedThrowingContinuation { continuation in
                 recordingContinuation = continuation
-                sessionQueue.async { [weak self] in
-                    self?.movieFileOutput.stopRecording()
+                sessionQueue.async {
+                    output.stopRecording()
                 }
             }
         }

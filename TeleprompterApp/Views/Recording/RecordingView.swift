@@ -29,7 +29,6 @@ struct RecordingView: View {
     var body: some View {
         ZStack {
             // LAYER 1: Full Screen Background (Video)
-            // Uses its own GeometryReader to capture full device dimensions for focus/aspect ratio
             GeometryReader { fullGeo in
                 ZStack {
                     if (cameraService.depthEnabled || cameraService.greenScreenEnabled || cameraService.activeFilter != .none), 
@@ -55,15 +54,13 @@ struct RecordingView: View {
                             )
                     }
                     
-                    // Focus indicator (Must be in Layer 1 to match full-screen tap coordinates)
+                    // Focus indicator
                     FocusIndicatorView(
                         position: focusIndicatorPosition,
-
                         isVisible: showFocusIndicator
                     )
                     
                     // Teleprompter Overlay - adaptive to orientation
-                    // MOVED TO LAYER 1 to allow background gradient to extend to top edge (status bar)
                     let isLandscape = fullGeo.size.width > fullGeo.size.height
                     
                     if isLandscape {
@@ -99,45 +96,57 @@ struct RecordingView: View {
                                 isLandscape: false
                             )
                             .frame(height: fullGeo.size.height * 0.45)
+                            .padding(.top, cameraService.isRecording ? 60 : 0) // Leave space for HUD
                             .clipped()
                             Spacer()
                         }
                     }
                     
-                    // Countdown Overlay (also full screen)
+                    // Countdown Overlay
                     if showCountdown {
                         CountdownOverlay(value: countdownValue)
                     }
                     
-                    // Permission Request Overlay (also full screen)
+                    // Permission Request Overlay
                     if permissionDenied {
                         PermissionDeniedView()
                     }
                 }
             }
-            .ignoresSafeArea() // Allows video to fill behind notches and tab bars
+            .ignoresSafeArea()
             
-            // LAYER 2: Controls & Interfaces (Respects Safe Area)
-            // This ensures controls sit ABOVE the TabBar and dynamic island automatically
+            // LAYER 2: Controls & Interfaces
             GeometryReader { safeGeo in
                 ZStack {
-                    // Focus indicator (positioned absolutely based on tap, so might need full coords? 
-                    // Actually focus indicator should track tap. Tap was in fullGeo. 
-                    // But here we are in safeGeo. We might need to adjust or put FocusIndicator in Layer 1.
-                    // For simplicity, let's put FocusIndicator in Layer 1? 
-                    // Or Render it here with global offset. 
-                    // Pivot: Put FocusIndicator in Layer 1 (inside Background).
                     
-
+                    // HUD (Top)
+                    if cameraService.isRecording {
+                        VStack {
+                            RecordingHUDView(
+                                duration: cameraService.recordingDuration,
+                                isPaused: teleprompterEngine.isPaused,
+                                onPauseToggled: {
+                                    if teleprompterEngine.isPaused {
+                                        teleprompterEngine.resumeScrolling()
+                                    } else {
+                                        teleprompterEngine.pauseScrolling()
+                                    }
+                                }
+                            )
+                            Spacer()
+                        }
+                        .zIndex(3)
+                        .transition(.move(edge: .top).combined(with: .opacity))
+                    }
                     
                     // Camera Controls Overlay
-                    if showCameraControls {
+                    if showCameraControls && !cameraService.isRecording {
                         VStack {
                             Spacer()
                             CameraControlsOverlay(cameraService: cameraService)
                                 .padding(.horizontal, 20)
-                                .padding(.bottom, 160) // Keep relative padding for visual hierarchy
-                                .frame(maxWidth: safeGeo.size.width) // Prevent overflow expansion
+                                .padding(.bottom, 120) // Keep relative padding above bottom bar
+                                .frame(maxWidth: safeGeo.size.width)
                         }
                         .transition(.move(edge: .bottom).combined(with: .opacity))
                         .zIndex(2)
@@ -155,27 +164,24 @@ struct RecordingView: View {
                             onRecordTapped: handleRecordTapped,
                             onStopTapped: handleStopTapped
                         )
-                        // No logic padding needed! The GeometryReader respects Safe Area (TabBar height), 
-                        // so this will sit on top of the TabBar automatically.
                     }
+                    .zIndex(4)
                 }
             }
         }
-        // Removed global .ignoresSafeArea() to allow Layer 2 to respect bounds
         .toolbar(cameraService.isRecording ? .hidden : .visible, for: .tabBar)
         .animation(.easeInOut(duration: 0.3), value: cameraService.isRecording)
         .task {
             await setupCamera()
         }
         .sheet(isPresented: $showSettings) {
+             // Let settings sheet handle dismissing correctly to unpause
             QuickSettingsSheet(settings: $appState.settings)
         }
         .sheet(isPresented: $showScriptPicker) {
             ScriptPickerSheet(selectedScript: $appState.currentScript)
         }
         .onDisappear {
-            // Only stop if we're actually leaving the screen (not just showing a sheet)
-            // We'll rely on onAppear to restart if needed
             if !showSettings && !showScriptPicker {
                 cameraService.stopSession()
                 teleprompterEngine.stopScrolling()
@@ -186,26 +192,21 @@ struct RecordingView: View {
             if newOrientation.isLandscape || newOrientation == .portrait {
                 deviceOrientation = newOrientation
             }
-            // Update camera connection orientation for Metal preview
             cameraService.updateVideoOrientation(newOrientation)
         }
         .onAppear {
             UIDevice.current.beginGeneratingDeviceOrientationNotifications()
-            // Restart session if it was stopped
             if !cameraService.isSessionRunning && !permissionDenied {
                 cameraService.startSession()
             }
-            // Ensure correct initial orientation
             cameraService.updateVideoOrientation(UIDevice.current.orientation)
         }
         .onChange(of: showSettings) { _, isShowing in
-            // Restart session when settings sheet is dismissed
             if !isShowing && !cameraService.isSessionRunning && !permissionDenied {
                 cameraService.startSession()
             }
         }
         .onChange(of: showScriptPicker) { _, isShowing in
-            // Restart session when script picker sheet is dismissed
             if !isShowing && !cameraService.isSessionRunning && !permissionDenied {
                 cameraService.startSession()
             }
@@ -213,6 +214,13 @@ struct RecordingView: View {
     }
     
     // MARK: - Methods
+    
+    // Formatting duration for Top HUD
+    private func formatDuration(_ duration: TimeInterval) -> String {
+        let minutes = Int(duration) / 60
+        let seconds = Int(duration) % 60
+        return String(format: "%02d:%02d", minutes, seconds)
+    }
     
     private func setupCamera() async {
         await cameraService.checkPermissions()
@@ -243,26 +251,21 @@ struct RecordingView: View {
     }
     
     private func handleTapToFocus(at location: CGPoint, in size: CGSize) {
-        // Convert to normalized coordinates (0-1)
         let normalizedPoint = CGPoint(
             x: location.x / size.width,
             y: location.y / size.height
         )
-        
-        // Show focus indicator
         focusIndicatorPosition = location
         showFocusIndicator = true
-        
-        // Apply focus on camera
         cameraService.setFocus(at: normalizedPoint)
         
-        // Hide indicator after delay
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
             showFocusIndicator = false
         }
     }
     
     private func handleRecordTapped() {
+        showCameraControls = false // dismiss controls if open
         if appState.settings.showCountdown {
             startCountdown()
         } else {
@@ -287,11 +290,8 @@ struct RecordingView: View {
     }
     
     private func startRecording() {
-        // Ensure session is running before attempting to record
         if !cameraService.isSessionRunning {
-            print("Session not running, starting session first...")
             cameraService.startSession()
-            // Wait briefly for session to start, then try recording
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
                 self.beginRecording()
             }
@@ -303,49 +303,106 @@ struct RecordingView: View {
     private func beginRecording() {
         do {
             _ = try cameraService.startRecording()
-            
-            // Configure teleprompter engine with current script for WPM-based speed
             if let script = appState.currentScript {
                 teleprompterEngine.configureForScript(script)
             }
-            
-            // START AUTO-SCROLLING when recording begins (with 2-second ease-in)
             teleprompterEngine.resetToTop()
             teleprompterEngine.startScrolling()
-            print("Teleprompter scrolling started with 2s ease-in!")
         } catch {
             print("Recording failed: \(error)")
         }
     }
     
     private func handleStopTapped() {
-        print("📹 handleStopTapped: Starting stop process")
         Task {
             do {
-                print("📹 handleStopTapped: Calling stopRecording...")
                 let videoURL = try await cameraService.stopRecording()
-                print("📹 handleStopTapped: Got video URL: \(videoURL)")
-                
                 teleprompterEngine.stopScrolling()
                 teleprompterEngine.resetToTop()
-                
-                // Export to Photos
-                print("📹 handleStopTapped: Calling exportToPhotos...")
                 try await cameraService.exportToPhotos(videoURL: videoURL)
-                print("✅ handleStopTapped: Video exported successfully")
-                
-                // Clean up temp file after successful export
                 try? FileManager.default.removeItem(at: videoURL)
-                print("📹 handleStopTapped: Cleaned up temp file")
             } catch {
-                print("❌ handleStopTapped: Stop recording failed: \(error)")
+                print("Stop recording failed: \(error)")
             }
         }
     }
 }
 
-// MARK: - Countdown Overlay
+// MARK: - HUD Overlay
+struct RecordingHUDView: View {
+    let duration: TimeInterval
+    let isPaused: Bool
+    var onPauseToggled: () -> Void
+    
+    var body: some View {
+        HStack {
+            // REC Pill
+            HStack(spacing: 8) {
+                Image(systemName: "video.fill")
+                    .foregroundColor(DesignSystem.Colors.destructive)
+                    .modifier(PulsingModifier())
+                
+                Text("REC \(formatDuration(duration))")
+                    .font(DesignSystem.Typography.headline.weight(.semibold))
+                    .foregroundColor(DesignSystem.Colors.primaryText)
+                    .fontDesign(.monospaced)
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 8)
+            .glassPanel(cornerRadius: 30)
+            
+            Spacer()
+            
+            HStack(spacing: 16) {
+                // Pause Script Pill
+                Button(action: onPauseToggled) {
+                    HStack(spacing: 8) {
+                        Image(systemName: isPaused ? "play.fill" : "pause.fill")
+                            .foregroundColor(DesignSystem.Colors.primaryText)
+                        Text(isPaused ? "RESUME" : "PAUSE SCRIPT")
+                            .font(.system(size: 10, weight: .bold))
+                            .foregroundColor(DesignSystem.Colors.primaryText)
+                            .tracking(1.0)
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 8)
+                    .glassPanel(cornerRadius: 30)
+                }
+                
+                Image(systemName: "sensors")
+                    .font(.system(size: 18))
+                    .foregroundColor(DesignSystem.Colors.accent)
+            }
+        }
+        .padding(.horizontal, 24)
+        .padding(.top, 16) // Safe area padding handled by safeGeo usually
+    }
+    
+    private func formatDuration(_ duration: TimeInterval) -> String {
+        let minutes = Int(duration) / 60
+        let seconds = Int(duration) % 60
+        return String(format: "%02d:%02d", minutes, seconds)
+    }
+}
 
+struct PulsingModifier: ViewModifier {
+    @State private var isPulsing = false
+    
+    func body(content: Content) -> some View {
+        content
+            .opacity(isPulsing ? 0.3 : 1.0)
+            .animation(
+                .easeInOut(duration: 0.8)
+                .repeatForever(autoreverses: true),
+                value: isPulsing
+            )
+            .onAppear {
+                isPulsing = true
+            }
+    }
+}
+
+// MARK: - Countdown Overlay
 struct CountdownOverlay: View {
     let value: Int
     
@@ -363,7 +420,6 @@ struct CountdownOverlay: View {
 }
 
 // MARK: - Permission Denied View
-
 struct PermissionDeniedView: View {
     var body: some View {
         ZStack {
@@ -396,7 +452,6 @@ struct PermissionDeniedView: View {
 }
 
 // MARK: - Quick Settings Sheet
-
 struct QuickSettingsSheet: View {
     @Binding var settings: TeleprompterSettings
     @Environment(\.dismiss) private var dismiss
@@ -444,7 +499,6 @@ struct QuickSettingsSheet: View {
 }
 
 // MARK: - Script Picker Sheet
-
 struct ScriptPickerSheet: View {
     @Binding var selectedScript: Script?
     @StateObject private var storage = ScriptStorageService()
@@ -462,7 +516,8 @@ struct ScriptPickerSheet: View {
                             Text(script.title)
                                 .font(.headline)
                                 .foregroundColor(.primary)
-                            Text("\(script.content.split(separator: " ").count) words")
+                            let wordCount = script.content.split(separator: " ").count
+                            Text("\(wordCount) words")
                                 .font(.caption)
                                 .foregroundColor(.secondary)
                         }

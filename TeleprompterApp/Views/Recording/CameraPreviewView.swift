@@ -72,21 +72,26 @@ class CameraPreviewUIView: UIView {
     }
     
     private func updateVideoOrientation() {
-        guard let connection = previewLayer.connection, connection.isVideoOrientationSupported else { return }
+        guard let connection = previewLayer.connection else { return }
         
+        let angle: CGFloat
         let orientation = UIDevice.current.orientation
         switch orientation {
         case .portrait:
-            connection.videoOrientation = .portrait
+            angle = 90
         case .landscapeLeft:
-            connection.videoOrientation = .landscapeRight // Inverted for front camera
+            angle = 180 // Inverted for front camera
         case .landscapeRight:
-            connection.videoOrientation = .landscapeLeft // Inverted for front camera
+            angle = 0 // Inverted for front camera
         case .portraitUpsideDown:
-            connection.videoOrientation = .portraitUpsideDown
+            angle = 270
         default:
             // Keep current orientation for face up/down or unknown
-            break
+            return
+        }
+        
+        if connection.isVideoRotationAngleSupported(angle) {
+            connection.videoRotationAngle = angle
         }
     }
     

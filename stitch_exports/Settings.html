@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0, viewport-fit=cover" name="viewport"/>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&amp;family=Manrope:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            colors: {
+              "on-tertiary-fixed-variant": "#454747",
+              "inverse-primary": "#c0000a",
+              "background": "#131313",
+              "outline": "#b18780",
+              "error-container": "#93000a",
+              "surface-dim": "#131313",
+              "surface-container-high": "#2a2a2a",
+              "primary-container": "#ff5545",
+              "on-primary-container": "#5c0002",
+              "on-background": "#e5e2e1",
+              "error": "#ffb4ab",
+              "on-surface-variant": "#ebbbb4",
+              "inverse-surface": "#e5e2e1",
+              "tertiary": "#c6c6c6",
+              "secondary-container": "#af8d11",
+              "secondary-fixed": "#ffe088",
+              "inverse-on-surface": "#313030",
+              "secondary-fixed-dim": "#e9c349",
+              "surface-variant": "#353534",
+              "surface-bright": "#3a3939",
+              "on-primary-fixed-variant": "#930005",
+              "surface-container-low": "#1c1b1b",
+              "primary-fixed": "#ffdad5",
+              "primary": "#ffb4aa",
+              "on-secondary": "#3c2f00",
+              "surface-container-lowest": "#0e0e0e",
+              "tertiary-container": "#909191",
+              "on-secondary-fixed": "#241a00",
+              "surface": "#131313",
+              "on-primary": "#690003",
+              "surface-container": "#201f1f",
+              "on-secondary-container": "#342800",
+              "secondary": "#e9c349",
+              "on-secondary-fixed-variant": "#574500",
+              "primary-fixed-dim": "#ffb4aa",
+              "on-primary-fixed": "#410001",
+              "surface-container-highest": "#353534",
+              "surface-tint": "#ffb4aa",
+              "on-tertiary": "#2f3131",
+              "tertiary-fixed-dim": "#c6c6c6",
+              "on-tertiary-fixed": "#1a1c1c",
+              "outline-variant": "#603e39",
+              "on-tertiary-container": "#282a2a",
+              "on-error": "#690005",
+              "tertiary-fixed": "#e2e2e2",
+              "on-surface": "#e5e2e1",
+              "on-error-container": "#ffdad6"
+            },
+            fontFamily: {
+              "headline": ["Plus Jakarta Sans"],
+              "body": ["Manrope"],
+              "label": ["Manrope"]
+            },
+            borderRadius: {"DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px"},
+          },
+        },
+      }
+    </script>
+<style>
+      .material-symbols-outlined {
+        font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+      }
+      body {
+        background-color: #131313;
+        color: #e5e2e1;
+        font-family: 'Manrope', sans-serif;
+      }
+      .glass-panel {
+        background: rgba(42, 42, 42, 0.6);
+        backdrop-filter: blur(24px);
+        -webkit-backdrop-filter: blur(24px);
+      }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+</head>
+<body class="min-h-screen pb-32">
+<!-- TopAppBar -->
+<header class="fixed top-0 w-full z-50 bg-neutral-950/60 backdrop-blur-xl shadow-2xl shadow-black/50 h-16 flex justify-between items-center px-6">
+<div class="flex items-center gap-4">
+<button class="text-neutral-500 hover:text-red-300 transition-colors duration-300 active:scale-95">
+<span class="material-symbols-outlined" data-icon="menu">menu</span>
+</button>
+<h1 class="text-lg font-bold tracking-widest uppercase text-neutral-100 font-headline">GoPrompt</h1>
+</div>
+<div class="flex items-center gap-4">
+<div class="w-8 h-8 rounded-full bg-surface-container-high border border-outline-variant/20 overflow-hidden">
+<img class="w-full h-full object-cover" data-alt="Professional studio portrait of a director" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDn95boDSx9JzXzRxE7-pSRixs8ZRvYWSKXt0wvTrvAXeeyyk1tAwWZw6-CgRZOq__veA3GUcO5uZan6UdqNCLF_CCLTrVKRVJ2hxxPnr3hDOwPfc30xHlbiQlqZoEN-BxrPqP9grMAQ8j3YVmpzh8dSaeLpNheDvZjR6YKerTlXK660J88Qso1p60UXVy3yTyGkkRWgu2ONRgwTCGDhhw95kzPk4fE8APiKbyeXcDRffEKW3QI7SxMGHUnZgw3dAzAz47eQqdisXM0"/>
+</div>
+</div>
+</header>
+<main class="pt-24 px-6 max-w-2xl mx-auto space-y-12">
+<!-- Screen Title -->
+<div class="space-y-2">
+<h2 class="font-headline font-bold text-3xl tracking-tight text-on-surface">Settings</h2>
+<p class="font-label text-sm text-on-surface-variant/70 uppercase tracking-widest">Configuration &amp; Performance</p>
+</div>
+<!-- Prompter Settings Section -->
+<section class="space-y-4">
+<h3 class="font-headline font-semibold text-xs uppercase tracking-widest text-secondary ml-1">Prompter Settings</h3>
+<div class="glass-panel rounded-xl overflow-hidden">
+<div class="p-5 flex items-center justify-between group active:bg-surface-container-low transition-colors duration-200">
+<div class="flex items-center gap-4">
+<div class="w-10 h-10 rounded-lg bg-surface-container-highest flex items-center justify-center text-primary">
+<span class="material-symbols-outlined" data-icon="flip">flip</span>
+</div>
+<div>
+<p class="font-headline font-medium text-on-surface">Mirroring</p>
+<p class="font-label text-xs text-on-surface-variant">Horizontal &amp; Vertical Reflection</p>
+</div>
+</div>
+<!-- Pro Toggle -->
+<div class="w-12 h-6 rounded-full bg-primary-container relative flex items-center px-1">
+<div class="w-4 h-4 rounded-full bg-surface-bright shadow-sm translate-x-6"></div>
+</div>
+</div>
+<div class="p-5 flex items-center justify-between group active:bg-surface-container-low transition-colors duration-200">
+<div class="flex items-center gap-4">
+<div class="w-10 h-10 rounded-lg bg-surface-container-highest flex items-center justify-center text-primary">
+<span class="material-symbols-outlined" data-icon="speed">speed</span>
+</div>
+<div>
+<p class="font-headline font-medium text-on-surface">Speed</p>
+<p class="font-label text-xs text-on-surface-variant">Words per minute (Default: 45)</p>
+</div>
+</div>
+<span class="font-label text-secondary font-bold">45 WPM</span>
+</div>
+<div class="p-5 flex items-center justify-between group active:bg-surface-container-low transition-colors duration-200">
+<div class="flex items-center gap-4">
+<div class="w-10 h-10 rounded-lg bg-surface-container-highest flex items-center justify-center text-primary">
+<span class="material-symbols-outlined" data-icon="text_fields">text_fields</span>
+</div>
+<div>
+<p class="font-headline font-medium text-on-surface">Font Size</p>
+<p class="font-label text-xs text-on-surface-variant">Optimal reading scale</p>
+</div>
+</div>
+<span class="font-label text-on-surface-variant">64pt</span>
+</div>
+</div>
+</section>
+<!-- Camera Settings Section -->
+<section class="space-y-4">
+<h3 class="font-headline font-semibold text-xs uppercase tracking-widest text-secondary ml-1">Camera Settings</h3>
+<div class="glass-panel rounded-xl overflow-hidden">
+<div class="p-5 flex items-center justify-between group active:bg-surface-container-low transition-colors duration-200">
+<div class="flex items-center gap-4">
+<div class="w-10 h-10 rounded-lg bg-surface-container-highest flex items-center justify-center text-primary">
+<span class="material-symbols-outlined" data-icon="hd">hd</span>
+</div>
+<div>
+<p class="font-headline font-medium text-on-surface">Resolution</p>
+<p class="font-label text-xs text-on-surface-variant">4K UHD High Dynamic Range</p>
+</div>
+</div>
+<div class="flex items-center gap-2">
+<span class="px-2 py-1 rounded bg-secondary-container/20 text-secondary text-[10px] font-bold uppercase tracking-tighter">Pro</span>
+<span class="material-symbols-outlined text-on-surface-variant text-sm" data-icon="chevron_right">chevron_right</span>
+</div>
+</div>
+<div class="p-5 flex items-center justify-between group active:bg-surface-container-low transition-colors duration-200">
+<div class="flex items-center gap-4">
+<div class="w-10 h-10 rounded-lg bg-surface-container-highest flex items-center justify-center text-primary">
+<span class="material-symbols-outlined" data-icon="shutter_speed">shutter_speed</span>
+</div>
+<div>
+<p class="font-headline font-medium text-on-surface">Frame Rate</p>
+<p class="font-label text-xs text-on-surface-variant">Cinematic Standard</p>
+</div>
+</div>
+<span class="font-label text-on-surface-variant">24 FPS</span>
+</div>
+<div class="p-5 flex items-center justify-between group active:bg-surface-container-low transition-colors duration-200">
+<div class="flex items-center gap-4">
+<div class="w-10 h-10 rounded-lg bg-surface-container-highest flex items-center justify-center text-primary">
+<span class="material-symbols-outlined" data-icon="video_stable">video_stable</span>
+</div>
+<div>
+<p class="font-headline font-medium text-on-surface">Stabilization</p>
+<p class="font-label text-xs text-on-surface-variant">Digital Gimbal Mode</p>
+</div>
+</div>
+<!-- Pro Toggle Off -->
+<div class="w-12 h-6 rounded-full bg-surface-container-high relative flex items-center px-1">
+<div class="w-4 h-4 rounded-full bg-surface-bright shadow-sm"></div>
+</div>
+</div>
+</div>
+</section>
+<!-- Account Section -->
+<section class="space-y-4">
+<h3 class="font-headline font-semibold text-xs uppercase tracking-widest text-secondary ml-1">Account</h3>
+<div class="glass-panel rounded-xl overflow-hidden">
+<div class="p-5 flex items-center justify-between group active:bg-surface-container-low transition-colors duration-200">
+<div class="flex items-center gap-4">
+<div class="w-10 h-10 rounded-lg bg-surface-container-highest flex items-center justify-center text-primary">
+<span class="material-symbols-outlined" data-icon="account_circle">account_circle</span>
+</div>
+<div>
+<p class="font-headline font-medium text-on-surface">Profile</p>
+<p class="font-label text-xs text-on-surface-variant">Director ID: #8829</p>
+</div>
+</div>
+<span class="material-symbols-outlined text-on-surface-variant text-sm" data-icon="chevron_right">chevron_right</span>
+</div>
+<div class="p-5 flex items-center justify-between group active:bg-surface-container-low transition-colors duration-200">
+<div class="flex items-center gap-4">
+<div class="w-10 h-10 rounded-lg bg-surface-container-highest flex items-center justify-center text-secondary">
+<span class="material-symbols-outlined" data-icon="workspace_premium" style="font-variation-settings: 'FILL' 1;">workspace_premium</span>
+</div>
+<div>
+<p class="font-headline font-medium text-on-surface">Subscription</p>
+<p class="font-label text-xs text-on-surface-variant">Obsidian Elite • Active</p>
+</div>
+</div>
+<span class="font-label text-secondary font-bold uppercase text-[10px] tracking-widest">Manage</span>
+</div>
+</div>
+</section>
+<div class="pt-8 flex flex-col items-center gap-2">
+<p class="font-label text-[10px] text-on-surface-variant/40 uppercase tracking-[0.2em]">GOPROMPT BUILD V4.2.0</p>
+<button class="text-red-400 font-headline font-semibold text-xs uppercase tracking-widest hover:text-red-300 transition-colors">Sign Out</button>
+</div>
+</main>
+<!-- BottomNavBar -->
+<nav class="fixed bottom-0 w-full rounded-t-2xl z-50 pb-safe bg-neutral-900/80 backdrop-blur-2xl border-t border-neutral-800/50 shadow-[0_-10px_40px_rgba(0,0,0,0.8)] h-20 flex justify-around items-center px-4">
+<a class="flex flex-col items-center justify-center text-neutral-500 pt-2 hover:text-neutral-200 transition-all active:opacity-80 scale-98" href="#">
+<span class="material-symbols-outlined" data-icon="description">description</span>
+<span class="font-manrope text-[10px] font-medium tracking-tighter uppercase mt-1">Scripts</span>
+</a>
+<a class="flex flex-col items-center justify-center text-neutral-500 pt-2 hover:text-neutral-200 transition-all active:opacity-80 scale-98" href="#">
+<span class="material-symbols-outlined" data-icon="edit_note">edit_note</span>
+<span class="font-manrope text-[10px] font-medium tracking-tighter uppercase mt-1">Editor</span>
+</a>
+<a class="flex flex-col items-center justify-center text-neutral-500 pt-2 hover:text-neutral-200 transition-all active:opacity-80 scale-98" href="#">
+<span class="material-symbols-outlined" data-icon="movie">movie</span>
+<span class="font-manrope text-[10px] font-medium tracking-tighter uppercase mt-1">Gallery</span>
+</a>
+<a class="flex flex-col items-center justify-center text-red-400 border-t-2 border-red-500 pt-2 hover:text-neutral-200 transition-all active:opacity-80 scale-98" href="#">
+<span class="material-symbols-outlined" data-icon="settings">settings</span>
+<span class="font-manrope text-[10px] font-medium tracking-tighter uppercase mt-1">Settings</span>
+</a>
+</nav>
+</body></html>

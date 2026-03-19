@@ -47,7 +47,7 @@ struct MetalPreviewView: UIViewRepresentable {
         }
         
         func draw(in view: MTKView) {
-            guard var image = ciImage,
+            guard let image = ciImage,
                   let currentDrawable = view.currentDrawable,
                   let commandBuffer = commandQueue?.makeCommandBuffer(),
                   let ciContext = ciContext else {
@@ -68,7 +68,7 @@ struct MetalPreviewView: UIViewRepresentable {
             let scaleY = drawableSize.height / image.extent.height
             let scale = max(scaleX, scaleY)
             
-            var scaledImage = image.transformed(by: CGAffineTransform(scaleX: scale, y: scale))
+            let scaledImage = image.transformed(by: CGAffineTransform(scaleX: scale, y: scale))
             
             // Center the image
             let xOffset = (drawableSize.width - scaledImage.extent.width) / 2 - scaledImage.extent.origin.x

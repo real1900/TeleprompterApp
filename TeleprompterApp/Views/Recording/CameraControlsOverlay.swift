@@ -1,433 +1,177 @@
 import SwiftUI
 
-/// Professional camera controls overlay with expandable panels
+/// Professional camera controls overlay derived from Stitch HUD design
 struct CameraControlsOverlay: View {
     @ObservedObject var cameraService: CinematicCameraService
-    
-    @State private var expandedPanel: ControlPanel? = nil
     @State private var showFilterPicker = false
     
-    enum ControlPanel {
-        case focus, exposure, whiteBalance, filter, depth, quality
-    }
-    
-    var body: some View {
+    private var exposureRow: some View {
         VStack(spacing: 12) {
-            // Expanded panel content
-            if let panel = expandedPanel {
-                panelContent(for: panel)
-                    .transition(.move(edge: .bottom).combined(with: .opacity))
+            HStack {
+                Text("EXPOSURE BIAS")
+                    .font(.system(size: 10, weight: .bold, design: .rounded))
+                    .foregroundColor(DesignSystem.Colors.secondary)
+                    .tracking(2.0)
+                
+                Spacer()
+                
+                Text("\(cameraService.exposureCompensation > 0 ? "+" : "")\(String(format: "%.1f", cameraService.exposureCompensation)) EV")
+                    .font(DesignSystem.Typography.headline.weight(.bold))
+                    .foregroundColor(DesignSystem.Colors.secondary)
             }
             
-            // Control buttons bar
-            VStack(spacing: 12) {
-                // Row 1: Camera Basics & Face Tracking
-                HStack(spacing: 16) {
-                    // Focus
-                    ControlPanelButton(
-                        icon: cameraService.focusMode.systemImage,
-                        label: "Focus",
-                        isActive: expandedPanel == .focus
-                    ) {
-                        togglePanel(.focus)
-                    }
-                    
-                    // Exposure
-                    ControlPanelButton(
-                        icon: cameraService.exposureMode.systemImage,
-                        label: "Expo",
-                        isActive: expandedPanel == .exposure
-                    ) {
-                        togglePanel(.exposure)
-                    }
-                    
-                    // White Balance
-                    ControlPanelButton(
-                        icon: cameraService.whiteBalanceMode.systemImage,
-                        label: "WB",
-                        isActive: expandedPanel == .whiteBalance
-                    ) {
-                        togglePanel(.whiteBalance)
-                    }
-                    
-                    // Center Stage (Face Tracking)
-                    ControlPanelButton(
-                        icon: cameraService.centerStageEnabled ? "person.crop.rectangle.fill" : "person.crop.rectangle",
-                        label: "Track",
-                        isActive: cameraService.centerStageEnabled
-                    ) {
-                        cameraService.toggleCenterStage()
-                    }
-                }
+            // Slider Track
+            ZStack(alignment: .leading) {
+                RoundedRectangle(cornerRadius: 16)
+                    .fill(DesignSystem.Colors.surfaceHighest.opacity(0.5))
+                    .frame(height: 48)
                 
-                // Row 2: Effects & Quality
-                HStack(spacing: 16) {
-                    // Filter
-                    ControlPanelButton(
-                        icon: "camera.filters",
-                        label: cameraService.activeFilter == .none ? "Filter" : cameraService.activeFilter.rawValue,
-                        isActive: cameraService.activeFilter != .none
-                    ) {
-                        showFilterPicker = true
-                    }
-                    
-                    // Depth (Portrait Mode)
-                    ControlPanelButton(
-                        icon: cameraService.depthEnabled ? "camera.aperture" : "camera.aperture",
-                        label: "Blur",
-                        isActive: expandedPanel == .depth || cameraService.depthEnabled
-                    ) {
-                        togglePanel(.depth)
-                    }
-                    
-                    // Green Screen
-                    ControlPanelButton(
-                        icon: "person.crop.rectangle.badge.plus",
-                        label: "Green",
-                        isActive: cameraService.greenScreenEnabled
-                    ) {
-                        cameraService.greenScreenEnabled.toggle()
-                    }
-                    
-                    // Quality
-                    ControlPanelButton(
-                        icon: "video.fill",
-                        label: cameraService.videoQuality.rawValue,
-                        isActive: expandedPanel == .quality
-                    ) {
-                        togglePanel(.quality)
+                // Values
+                HStack {
+                    ForEach(-3...3, id: \.self) { val in
+                        Text(val > 0 ? "+\(val)" : "\(val)")
+                            .font(.system(size: 10, weight: val == Int(cameraService.exposureCompensation) ? .bold : .regular, design: .monospaced))
+                            .foregroundColor(val == Int(cameraService.exposureCompensation) ? DesignSystem.Colors.secondary : DesignSystem.Colors.secondaryText)
+                            .frame(maxWidth: .infinity)
                     }
                 }
+                .padding(.horizontal, 16)
+                
+                // Invisible real slider over top
+                Slider(value: $cameraService.exposureCompensation, in: -3...3)
+                    .opacity(0.05)
+                    .frame(height: 48)
             }
-            .padding(.horizontal, DesignSystem.Layout.paddingStandard)
-            .padding(.vertical, 12)
-            .glassPanel(cornerRadius: DesignSystem.Layout.cornerRadiusLarge)
-            .padding(.horizontal, DesignSystem.Layout.paddingStandard)
         }
-        .padding(.horizontal, DesignSystem.Layout.paddingStandard)
+    }
+    
+    private var gridRow: some View {
+        HStack(spacing: 16) {
+            // Focus Mode (AF-C vs Manual)
+            Button {
+                cameraService.focusMode = cameraService.focusMode == .continuousAutoFocus ? .manual : .continuousAutoFocus
+            } label: {
+                VStack(spacing: 8) {
+                    Image(systemName: "scope")
+                        .font(.system(size: 20))
+                        .foregroundColor(DesignSystem.Colors.secondaryText)
+                    Text(cameraService.focusMode == .continuousAutoFocus ? "AF-C" : "MANUAL")
+                        .font(.system(size: 9, weight: .bold))
+                        .tracking(1.0)
+                        .foregroundColor(DesignSystem.Colors.secondaryText)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 12)
+                .background(DesignSystem.Colors.surfaceHighest.opacity(0.4))
+                .overlay(RoundedRectangle(cornerRadius: 16).stroke(Color.white.opacity(0.05), lineWidth: 1))
+                .cornerRadius(16)
+            }
+            
+            // Center Stage (Face On/Off)
+            Button {
+                cameraService.toggleCenterStage()
+            } label: {
+                VStack(spacing: 8) {
+                    Image(systemName: "face.dashed")
+                        .font(.system(size: 20))
+                        .foregroundColor(cameraService.centerStageEnabled ? DesignSystem.Colors.secondary : DesignSystem.Colors.secondaryText)
+                    Text(cameraService.centerStageEnabled ? "FACE ON" : "FACE OFF")
+                        .font(.system(size: 9, weight: .bold))
+                        .tracking(1.0)
+                        .foregroundColor(cameraService.centerStageEnabled ? DesignSystem.Colors.secondary : DesignSystem.Colors.secondaryText)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 12)
+                .background(cameraService.centerStageEnabled ? DesignSystem.Colors.secondary.opacity(0.1) : DesignSystem.Colors.surfaceHighest.opacity(0.4))
+                .overlay(RoundedRectangle(cornerRadius: 16).stroke(cameraService.centerStageEnabled ? DesignSystem.Colors.secondary.opacity(0.2) : Color.white.opacity(0.05), lineWidth: 1))
+                .cornerRadius(16)
+            }
+            
+            // Depth (Portrait)
+            Button {
+                cameraService.depthEnabled.toggle()
+            } label: {
+                VStack(spacing: 8) {
+                    Image(systemName: "camera.aperture")
+                        .font(.system(size: 20))
+                        .foregroundColor(cameraService.depthEnabled ? DesignSystem.Colors.primaryText : DesignSystem.Colors.secondaryText)
+                    Text("PORTRAIT")
+                        .font(.system(size: 9, weight: .bold))
+                        .tracking(1.0)
+                        .foregroundColor(cameraService.depthEnabled ? DesignSystem.Colors.primaryText : DesignSystem.Colors.secondaryText)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 12)
+                .background(cameraService.depthEnabled ? DesignSystem.Colors.surfaceHighlight : DesignSystem.Colors.surfaceHighest.opacity(0.4))
+                .overlay(RoundedRectangle(cornerRadius: 16).stroke(Color.white.opacity(0.05), lineWidth: 1))
+                .cornerRadius(16)
+            }
+            
+            // Filters (LUTs)
+            Button {
+                showFilterPicker = true
+            } label: {
+                VStack(spacing: 8) {
+                    Image(systemName: "camera.filters")
+                        .font(.system(size: 20))
+                        .foregroundColor(cameraService.activeFilter != .none ? DesignSystem.Colors.accent : DesignSystem.Colors.secondaryText)
+                    Text(cameraService.activeFilter != .none ? "LUTS ON" : "LUTS")
+                        .font(.system(size: 9, weight: .bold))
+                        .tracking(1.0)
+                        .foregroundColor(cameraService.activeFilter != .none ? DesignSystem.Colors.accent : DesignSystem.Colors.secondaryText)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 12)
+                .background(cameraService.activeFilter != .none ? DesignSystem.Colors.accent.opacity(0.1) : DesignSystem.Colors.surfaceHighest.opacity(0.4))
+                .overlay(RoundedRectangle(cornerRadius: 16).stroke(cameraService.activeFilter != .none ? DesignSystem.Colors.accent.opacity(0.2) : Color.white.opacity(0.05), lineWidth: 1))
+                .cornerRadius(16)
+            }
+        }
+    }
+    
+    private var greenScreenRow: some View {
+        HStack(spacing: 12) {
+            Circle()
+                .fill(cameraService.greenScreenEnabled ? Color.green : DesignSystem.Colors.secondaryText.opacity(0.5))
+                .frame(width: 8, height: 8)
+                .shadow(color: cameraService.greenScreenEnabled ? Color.green.opacity(0.6) : .clear, radius: 8, x: 0, y: 0)
+            
+            Text(cameraService.greenScreenEnabled ? "GREEN SCREEN ACTIVE" : "GREEN SCREEN")
+                .font(.system(size: 10, weight: .bold))
+                .tracking(1.5)
+                .foregroundColor(DesignSystem.Colors.secondaryText)
+            
+            Spacer()
+            
+            Button(action: { cameraService.greenScreenEnabled.toggle() }) {
+                Image(systemName: cameraService.greenScreenEnabled ? "switch.2" : "switch.2")
+                    .foregroundColor(DesignSystem.Colors.secondaryText)
+            }
+        }
+    }
+
+    var body: some View {
+        VStack(spacing: 24) {
+            exposureRow
+            gridRow
+            greenScreenRow
+                .padding(.top, 8)
+                .padding(.horizontal, 8)
+        }
+        .padding(24)
+        .glassPanel(cornerRadius: 24)
+        .overlay(RoundedRectangle(cornerRadius: 24).stroke(Color.white.opacity(0.1), lineWidth: 1))
+        .shadow(color: Color.black.opacity(0.3), radius: 30, x: 0, y: 10)
+        
+        // Filter picker sheet
         .sheet(isPresented: $showFilterPicker) {
             FilterPickerSheet(selectedFilter: $cameraService.activeFilter)
                 .presentationDetents([.medium])
         }
     }
-    
-    private func togglePanel(_ panel: ControlPanel) {
-        withAnimation(.spring(response: 0.3)) {
-            expandedPanel = expandedPanel == panel ? nil : panel
-        }
-    }
-    
-    @ViewBuilder
-    private func panelContent(for panel: ControlPanel) -> some View {
-        VStack(spacing: 12) {
-            switch panel {
-            case .focus:
-                FocusControlPanel(cameraService: cameraService)
-            case .exposure:
-                ExposureControlPanel(cameraService: cameraService)
-            case .whiteBalance:
-                WhiteBalanceControlPanel(cameraService: cameraService)
-            case .filter:
-                EmptyView() // Filter uses sheet, not inline panel
-            case .depth:
-                DepthControlPanel(cameraService: cameraService)
-            case .quality:
-                QualityControlPanel(cameraService: cameraService)
-            }
-        }
-        .padding(DesignSystem.Layout.paddingStandard)
-        .glassPanel(cornerRadius: DesignSystem.Layout.cornerRadiusLarge)
-    }
 }
 
-// MARK: - Control Panel Button
-
-struct ControlPanelButton: View {
-    let icon: String
-    let label: String
-    var isActive: Bool = false
-    let action: () -> Void
-    
-    var body: some View {
-        Button(action: action) {
-            VStack(spacing: 4) {
-                Text(label)
-                    .font(DesignSystem.Typography.caption)
-            }
-            .foregroundColor(isActive ? DesignSystem.Colors.accent : DesignSystem.Colors.primaryText)
-            .frame(minWidth: 50)
-        }
-    }
-}
-
-// MARK: - Focus Control Panel
-
-struct FocusControlPanel: View {
-    @ObservedObject var cameraService: CinematicCameraService
-    
-    var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("FOCUS")
-                .font(.caption.bold())
-                .foregroundColor(.secondary)
-            
-            // Focus mode picker
-            HStack(spacing: 8) {
-                ForEach(FocusMode.allCases) { mode in
-                    Button {
-                        cameraService.focusMode = mode
-                    } label: {
-                        VStack(spacing: 4) {
-                            Image(systemName: mode.systemImage)
-                            Text(mode.rawValue)
-                                .font(.caption2)
-                        }
-                        .foregroundColor(cameraService.focusMode == mode ? DesignSystem.Colors.accent : DesignSystem.Colors.primaryText)
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 8)
-                        .background(cameraService.focusMode == mode ? DesignSystem.Colors.accent.opacity(0.2) : Color.clear)
-                        .cornerRadius(8)
-                    }
-                }
-            }
-            
-            // Manual focus slider
-            if cameraService.focusMode == .manual {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Focus Distance")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                    HStack {
-                        Text("Near")
-                            .font(.caption2)
-                        Slider(value: $cameraService.focusPosition, in: 0...1)
-                            .tint(.red)
-                        Text("Far")
-                            .font(.caption2)
-                    }
-                }
-            }
-        }
-    }
-}
-
-// MARK: - Exposure Control Panel
-
-struct ExposureControlPanel: View {
-    @ObservedObject var cameraService: CinematicCameraService
-    
-    var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("EXPOSURE")
-                .font(.caption.bold())
-                .foregroundColor(.secondary)
-            
-            // Exposure compensation slider
-            VStack(alignment: .leading, spacing: 4) {
-                HStack {
-                    Text("EV")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                    Spacer()
-                    Text(String(format: "%+.1f", cameraService.exposureCompensation))
-                        .font(.caption.monospacedDigit())
-                }
-                Slider(value: $cameraService.exposureCompensation, in: -3...3)
-                    .tint(.red)
-            }
-            
-            // Exposure mode picker
-            HStack(spacing: 8) {
-                ForEach(ExposureMode.allCases) { mode in
-                    Button {
-                        cameraService.exposureMode = mode
-                    } label: {
-                        Text(mode.rawValue)
-                            .font(.caption)
-                            .foregroundColor(cameraService.exposureMode == mode ? DesignSystem.Colors.accent : DesignSystem.Colors.primaryText)
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 6)
-                            .background(cameraService.exposureMode == mode ? DesignSystem.Colors.accent.opacity(0.2) : Color.clear)
-                            .cornerRadius(6)
-                    }
-                }
-            }
-            
-            // Manual controls
-            if cameraService.exposureMode == .manual {
-                VStack(spacing: 8) {
-                    HStack {
-                        Text("ISO")
-                            .font(.caption)
-                            .frame(width: 60, alignment: .leading)
-                        Slider(value: $cameraService.iso, in: cameraService.minISO...cameraService.maxISO)
-                            .tint(.red)
-                        Text("\(Int(cameraService.iso))")
-                            .font(.caption.monospacedDigit())
-                            .frame(width: 50)
-                    }
-                }
-            }
-        }
-    }
-}
-
-// MARK: - White Balance Control Panel
-
-struct WhiteBalanceControlPanel: View {
-    @ObservedObject var cameraService: CinematicCameraService
-    
-    var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("WHITE BALANCE")
-                .font(.caption.bold())
-                .foregroundColor(.secondary)
-            
-            // Preset buttons (scrollable)
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 8) {
-                    ForEach(WhiteBalanceMode.allCases) { mode in
-                        Button {
-                            cameraService.whiteBalanceMode = mode
-                        } label: {
-                            VStack(spacing: 4) {
-                                Text(mode.rawValue)
-                                    .font(.caption2)
-                            }
-                            .foregroundColor(cameraService.whiteBalanceMode == mode ? DesignSystem.Colors.accent : DesignSystem.Colors.primaryText)
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 8)
-                            .background(cameraService.whiteBalanceMode == mode ? DesignSystem.Colors.accent.opacity(0.2) : Color.clear)
-                            .cornerRadius(8)
-                        }
-                    }
-                }
-            }
-            
-            // Manual controls
-            if cameraService.whiteBalanceMode == .locked {
-                VStack(spacing: 8) {
-                    HStack {
-                        Text("Temp")
-                            .font(.caption)
-                            .frame(width: 50, alignment: .leading)
-                        Slider(value: $cameraService.colorTemperature, in: 2500...10000)
-                            .tint(.orange)
-                        Text("\(Int(cameraService.colorTemperature))K")
-                            .font(.caption.monospacedDigit())
-                            .frame(width: 60)
-                    }
-                    
-                    HStack {
-                        Text("Tint")
-                            .font(.caption)
-                            .frame(width: 50, alignment: .leading)
-                        Slider(value: $cameraService.tint, in: -150...150)
-                            .tint(.green)
-                        Text(String(format: "%+.0f", cameraService.tint))
-                            .font(.caption.monospacedDigit())
-                            .frame(width: 60)
-                    }
-                }
-            }
-        }
-    }
-}
-
-// MARK: - Quality Control Panel
-
-struct QualityControlPanel: View {
-    @ObservedObject var cameraService: CinematicCameraService
-    
-    var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("VIDEO QUALITY")
-                .font(.caption.bold())
-                .foregroundColor(.secondary)
-            
-            HStack(spacing: 12) {
-                ForEach(VideoQuality.allCases) { quality in
-                    Button {
-                        cameraService.videoQuality = quality
-                    } label: {
-                        Text(quality.rawValue)
-                            .font(.caption.bold())
-                            .foregroundColor(cameraService.videoQuality == quality ? .black : DesignSystem.Colors.primaryText)
-                            .padding(.horizontal, 16)
-                            .padding(.vertical, 10)
-                            .background(cameraService.videoQuality == quality ? DesignSystem.Colors.accent : Color.white.opacity(0.2))
-                            .cornerRadius(8)
-                    }
-                }
-            }
-        }
-    }
-}
-
-// MARK: - Depth Control Panel
-
-struct DepthControlPanel: View {
-    @ObservedObject var cameraService: CinematicCameraService
-    
-    var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("BLUR BACKGROUND")
-                .font(.caption.bold())
-                .foregroundColor(.secondary)
-            
-            // Portrait Effect Toggle
-            HStack {
-                Text("Background Blur")
-                    .font(.caption)
-                Spacer()
-                Toggle("", isOn: $cameraService.depthEnabled)
-                    .labelsHidden()
-                    .tint(.red)
-            }
-            
-            // Aperture slider (when depth is enabled)
-            if cameraService.depthEnabled {
-                VStack(alignment: .leading, spacing: 4) {
-                    HStack {
-                        Text("Aperture")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                        Spacer()
-                        Text("f/\(String(format: "%.1f", cameraService.simulatedAperture))")
-                            .font(.caption.monospacedDigit())
-                    }
-                    HStack {
-                        Text("More blur")
-                            .font(.caption2)
-                            .foregroundColor(.secondary)
-                        Slider(
-                            value: $cameraService.simulatedAperture,
-                            in: CinematicCameraService.minAperture...CinematicCameraService.maxAperture
-                        )
-                        .tint(DesignSystem.Colors.accent)
-                        Text("Less blur")
-                            .font(.caption2)
-                            .foregroundColor(.secondary)
-                    }
-                }
-            }
-            
-            // Info text
-            HStack(spacing: 4) {
-                Image(systemName: "info.circle")
-                    .font(.caption)
-                    .foregroundColor(.blue)
-                Text("Background blur creates a cinematic look.")
-                    .font(.caption2)
-                    .foregroundColor(.secondary)
-            }
-            .padding(.top, 4)
-        }
-    }
-}
-
-// MARK: - Filter Picker Sheet
-
+// Keep the Filter Picker Sheet unchanged, it works perfectly in sheets
 struct FilterPickerSheet: View {
     @Binding var selectedFilter: CameraFilter
     @Environment(\.dismiss) private var dismiss
@@ -437,19 +181,17 @@ struct FilterPickerSheet: View {
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
-                // Notice banner
                 HStack(spacing: 8) {
                     Image(systemName: "info.circle.fill")
-                        .foregroundColor(.blue)
-                    Text("Filter preview coming soon. Selected filter will be applied to saved video.")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
+                        .foregroundColor(DesignSystem.Colors.accent)
+                    Text("Selected filter will be applied to saved video.")
+                        .font(DesignSystem.Typography.caption)
+                        .foregroundColor(DesignSystem.Colors.secondaryText)
                 }
                 .padding(12)
-                .background(Color.blue.opacity(0.1))
+                .background(DesignSystem.Colors.surfaceHighlight)
                 .cornerRadius(8)
-                .padding(.horizontal)
-                .padding(.top)
+                .padding()
                 
                 ScrollView {
                     LazyVGrid(columns: columns, spacing: 16) {
@@ -464,12 +206,12 @@ struct FilterPickerSheet: View {
                                         .frame(width: 60, height: 60)
                                         .overlay(
                                             RoundedRectangle(cornerRadius: 8)
-                                                .stroke(selectedFilter == filter ? Color.red : Color.clear, lineWidth: 3)
+                                                .stroke(selectedFilter == filter ? DesignSystem.Colors.accent : Color.clear, lineWidth: 3)
                                         )
                                     
                                     Text(filter.rawValue)
                                         .font(.caption)
-                                        .foregroundColor(selectedFilter == filter ? .red : .primary)
+                                        .foregroundColor(selectedFilter == filter ? DesignSystem.Colors.accent : DesignSystem.Colors.primaryText)
                                 }
                             }
                         }
@@ -477,11 +219,13 @@ struct FilterPickerSheet: View {
                     .padding()
                 }
             }
-            .navigationTitle("Filters")
+            .background(DesignSystem.Colors.background.ignoresSafeArea())
+            .navigationTitle("LUTs & Filters")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { dismiss() }
+                    Button("Done") { dismiss() }
+                        .foregroundColor(DesignSystem.Colors.accent)
                 }
             }
         }
@@ -507,34 +251,10 @@ struct FilterPickerSheet: View {
     }
 }
 
-// MARK: - Filter Badge
-
-struct FilterBadge: View {
-    let filter: CameraFilter
-    
-    var body: some View {
-        HStack(spacing: 4) {
-            Image(systemName: "camera.filters")
-                .font(.caption)
-            Text(filter.rawValue)
-                .font(.caption.bold())
-        }
-        .foregroundColor(.white)
-        .padding(.horizontal, 10)
-        .padding(.vertical, 6)
-        .background(Color.purple.opacity(0.8))
-        .clipShape(Capsule())
-    }
-}
-
 #Preview {
     ZStack {
         Color.black.ignoresSafeArea()
-        
-        VStack {
-            Spacer()
-            CameraControlsOverlay(cameraService: CinematicCameraService())
-                .padding(.bottom, 100)
-        }
+        CameraControlsOverlay(cameraService: CinematicCameraService())
+            .padding(16)
     }
 }

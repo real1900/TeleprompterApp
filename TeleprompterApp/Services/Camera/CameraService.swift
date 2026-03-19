@@ -1,5 +1,5 @@
 import Foundation
-import AVFoundation
+@preconcurrency import AVFoundation
 import Photos
 import Combine
 
@@ -19,10 +19,10 @@ class CameraService: NSObject, ObservableObject {
     
     // MARK: - AVFoundation Components
     
-    let captureSession = AVCaptureSession()
-    private var videoDeviceInput: AVCaptureDeviceInput?
-    private var audioDeviceInput: AVCaptureDeviceInput?
-    private let movieFileOutput = AVCaptureMovieFileOutput()
+    nonisolated(unsafe) let captureSession = AVCaptureSession()
+    nonisolated(unsafe) private var videoDeviceInput: AVCaptureDeviceInput?
+    nonisolated(unsafe) private var audioDeviceInput: AVCaptureDeviceInput?
+    nonisolated(unsafe) private let movieFileOutput = AVCaptureMovieFileOutput()
     
     // MARK: - Private Properties
     
@@ -105,14 +105,8 @@ class CameraService: NSObject, ObservableObject {
             throw CameraError.permissionDenied
         }
         
-        // Configure session on background queue
         try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
-            sessionQueue.async { [weak self] in
-                guard let self else {
-                    continuation.resume(throwing: CameraError.setupFailed(NSError(domain: "CameraService", code: -1)))
-                    return
-                }
-                
+            sessionQueue.async { [self] in
                 do {
                     try self.setupSession()
                     continuation.resume()
@@ -123,7 +117,7 @@ class CameraService: NSObject, ObservableObject {
         }
     }
     
-    private func setupSession() throws {
+    nonisolated private func setupSession() throws {
         captureSession.beginConfiguration()
         defer { captureSession.commitConfiguration() }
         
@@ -174,23 +168,25 @@ class CameraService: NSObject, ObservableObject {
     // MARK: - Session Control
     
     func startSession() {
+        let session = captureSession
         sessionQueue.async { [weak self] in
-            guard let self, !self.captureSession.isRunning else { return }
-            self.captureSession.startRunning()
+            guard !session.isRunning else { return }
+            session.startRunning()
             
             Task { @MainActor in
-                self.isSessionRunning = true
+                self?.isSessionRunning = true
             }
         }
     }
     
     func stopSession() {
+        let session = captureSession
         sessionQueue.async { [weak self] in
-            guard let self, self.captureSession.isRunning else { return }
-            self.captureSession.stopRunning()
+            guard session.isRunning else { return }
+            session.stopRunning()
             
             Task { @MainActor in
-                self.isSessionRunning = false
+                self?.isSessionRunning = false
             }
         }
     }
@@ -213,17 +209,18 @@ class CameraService: NSObject, ObservableObject {
         currentVideoURL = outputURL
         
         // Start recording on session queue
+        let output = movieFileOutput
         sessionQueue.async { [weak self] in
             guard let self else { return }
-            self.movieFileOutput.startRecording(to: outputURL, recordingDelegate: self)
+            output.startRecording(to: outputURL, recordingDelegate: self)
         }
         
         // Start duration timer
-        recordingStartTime = Date()
+        let startTime = Date()
+        recordingStartTime = startTime
         recordingTimer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in
-            guard let self, let startTime = self.recordingStartTime else { return }
             Task { @MainActor in
-                self.recordingDuration = Date().timeIntervalSince(startTime)
+                self?.recordingDuration = Date().timeIntervalSince(startTime)
             }
         }
         
@@ -240,11 +237,12 @@ class CameraService: NSObject, ObservableObject {
         recordingTimer?.invalidate()
         recordingTimer = nil
         
+        let output = movieFileOutput
         return try await withCheckedThrowingContinuation { continuation in
             recordingContinuation = continuation
             
-            sessionQueue.async { [weak self] in
-                self?.movieFileOutput.stopRecording()
+            sessionQueue.async {
+                output.stopRecording()
             }
         }
     }
