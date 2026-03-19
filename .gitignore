@@ -56,3 +56,5 @@ playground.xcworkspace
 # App Store Connect
 *.itmsp
 *.psd
+*.p8
+api_key.json
