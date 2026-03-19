@@ -675,8 +675,8 @@ class CinematicCameraService: NSObject, ObservableObject {
         try? FileManager.default.removeItem(at: outputURL)
         currentVideoURL = outputURL
         
-        // If depth is enabled, use AVAssetWriter to record processed frames
-        if depthEnabled {
+        // If depth or green screen is enabled, use AVAssetWriter to record processed frames
+        if depthEnabled || greenScreenEnabled {
             try setupAssetWriter(outputURL: outputURL)
             // Reset frame tracking state
             assetWriterStartTime = nil

@@ -44,16 +44,15 @@ struct TeleprompterOverlay: View {
                 VStack(spacing: 0) {
                     ScrollView(.vertical, showsIndicators: false) {
                         VStack(alignment: isLandscape ? .leading : .center, spacing: 0) {
-                            // Top spacer to position first line below Dynamic Island
-                            Spacer()
-                                .frame(height: isLandscape ? 30 : max(geometry.safeAreaInsets.top + 15, 60))
+                            // Top spacer based on active zone
+                            Spacer(minLength: geometry.size.height * activeZoneRatio)
                             
                             // The script text
                             Text(script.content)
                                 .font(.system(size: isLandscape ? settings.fontSize * 0.85 : settings.fontSize, weight: .semibold, design: .rounded))
                                 .foregroundColor(.white)
                                 .shadow(color: .black.opacity(0.6), radius: 4, x: 0, y: 2)
-                                .shadow(color: .black.opacity(0.4), radius: 10, x: 0, y: 4) // Stronger shadow for landscape
+                                .shadow(color: .black.opacity(0.4), radius: 10, x: 0, y: 4)
                                 .multilineTextAlignment(isLandscape ? .leading : .center)
                                 .lineSpacing(settings.fontSize * 0.35)
                                 .fixedSize(horizontal: false, vertical: true)
@@ -61,15 +60,18 @@ struct TeleprompterOverlay: View {
                                 .padding(.horizontal, isLandscape ? 16 : 20)
                                 .padding(.leading, isLandscape ? max(geometry.safeAreaInsets.leading, 38) : 0)
                             
-                            // Bottom spacer for scroll-through (Increased to 85% to allow last line to reach active zone)
-                            Spacer()
-                                .frame(height: geometry.size.height * 0.76)
+                            // Bottom spacer to allow scroll-through
+                            Spacer(minLength: geometry.size.height * 0.6)
                         }
                         .frame(width: isLandscape ? landscapeColumnWidth : columnWidth)
                         .background(GeometryReader { contentGeometry in
-                            Color.clear.onAppear {
-                                engine.contentHeight = contentGeometry.size.height
-                            }
+                            Color.clear
+                                .onAppear {
+                                    engine.contentHeight = contentGeometry.size.height
+                                }
+                                .onChange(of: contentGeometry.size.height) { _, newHeight in
+                                    engine.contentHeight = newHeight
+                                }
                         })
                         .offset(y: -engine.scrollOffset)
                     }

@@ -23,14 +23,18 @@ struct RecordingControlsView: View {
                     } label: {
                         ZStack {
                             Circle()
-                                .fill(.white)
-                                .frame(width: 56, height: 56)
+                                .fill(DesignSystem.Colors.surfaceHighlight)
+                                .frame(width: 64, height: 64)
+                                .overlay(
+                                    Circle()
+                                        .stroke(Color.white.opacity(0.3), lineWidth: 1)
+                                )
                             
-                            RoundedRectangle(cornerRadius: 4)
-                                .fill(Color.red)
-                                .frame(width: 20, height: 20)
+                            RoundedRectangle(cornerRadius: 6)
+                                .fill(DesignSystem.Colors.destructive)
+                                .frame(width: 24, height: 24)
                         }
-                        .shadow(color: .black.opacity(0.3), radius: 8, x: 0, y: 4)
+                        .shadow(color: .black.opacity(0.4), radius: 10, x: 0, y: 5)
                     }
                     .padding(.bottom, 40)
                 }
@@ -41,12 +45,11 @@ struct RecordingControlsView: View {
                     HStack {
                         Spacer()
                         Text(formatDuration(cameraService.recordingDuration))
-                            .font(.system(.subheadline, design: .monospaced).weight(.medium))
-                            .foregroundColor(.white)
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 6)
-                            .background(.ultraThinMaterial)
-                            .clipShape(Capsule())
+                            .font(.system(.subheadline, design: .monospaced).weight(.bold))
+                            .foregroundColor(DesignSystem.Colors.primaryText)
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 8)
+                            .glassPill()
                             .padding(.trailing, 20)
                             .padding(.bottom, 20)
                     }
@@ -56,18 +59,21 @@ struct RecordingControlsView: View {
             // NOT RECORDING: Full control bar at bottom
             VStack {
                 Spacer()
-                HStack(spacing: 24) {
-                    ControlButton(systemImage: "gear", label: "Settings", action: onSettingsTapped)
-                    ControlButton(systemImage: "camera.aperture", label: "Camera", isActive: showCameraControls, action: { showCameraControls.toggle() })
+                HStack(spacing: 28) {
+                    ControlButton(systemImage: "gearshape.fill", label: "Settings", action: onSettingsTapped)
+                    ControlButton(systemImage: "slider.horizontal.3", label: "Controls", isActive: showCameraControls, action: { showCameraControls.toggle() })
+                    
                     RecordButton(isRecording: false, onTap: onRecordTapped)
-                    ControlButton(systemImage: "doc.text", label: "Script", action: onScriptTapped)
+                        .padding(.horizontal, 8)
+                        
+                    ControlButton(systemImage: "doc.plaintext.fill", label: "Script", action: onScriptTapped)
                     VideoQualityButton(quality: cameraService.videoQuality) { cycleVideoQuality() }
                 }
-                .padding(.horizontal, 20)
-                .padding(.vertical, 16)
-                .clipShape(RoundedRectangle(cornerRadius: 20))
-                .padding(.horizontal, 16)
-                .padding(.bottom, 30)
+                .padding(.horizontal, 24)
+                .padding(.vertical, DesignSystem.Layout.paddingStandard)
+                .glassPill()
+                .padding(.horizontal, DesignSystem.Layout.paddingStandard)
+                .padding(.bottom, 32)
             }
         }
     }
@@ -100,25 +106,25 @@ struct RecordingStatusBar: View {
             // Recording indicator
             HStack(spacing: 6) {
                 Circle()
-                    .fill(Color.red)
+                    .fill(DesignSystem.Colors.accent)
                     .frame(width: 10, height: 10)
                     .overlay(
                         Circle()
-                            .fill(Color.red)
+                            .fill(DesignSystem.Colors.accent)
                             .scaleEffect(1.5)
                             .opacity(0.3)
                     )
                     .modifier(PulsingModifier())
                 
                 Text("REC")
-                    .font(.caption.bold())
-                    .foregroundColor(.red)
+                    .font(DesignSystem.Typography.caption.bold())
+                    .foregroundColor(DesignSystem.Colors.accent)
             }
             
             // Duration
             Text(formatDuration(duration))
                 .font(.system(.body, design: .monospaced).bold())
-                .foregroundColor(.white)
+                .foregroundColor(DesignSystem.Colors.primaryText)
             
             Spacer()
             
@@ -129,20 +135,19 @@ struct RecordingStatusBar: View {
                 HStack(spacing: 4) {
                     Image(systemName: isPaused ? "play.fill" : "pause.fill")
                     Text(isPaused ? "Resume" : "Pause")
-                        .font(.caption.bold())
+                        .font(DesignSystem.Typography.caption.bold())
                 }
                 .foregroundColor(.white)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 6)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 8)
                 .background(isPaused ? Color.green : Color.orange)
                 .clipShape(Capsule())
             }
         }
-        .padding(.horizontal, 20)
+        .padding(.horizontal, DesignSystem.Layout.paddingLarge)
         .padding(.vertical, 12)
-        .background(.ultraThinMaterial)
-        .clipShape(RoundedRectangle(cornerRadius: 12))
-        .padding(.horizontal, 16)
+        .glassPanel(cornerRadius: DesignSystem.Layout.cornerRadiusStandard)
+        .padding(.horizontal, DesignSystem.Layout.paddingStandard)
     }
     
     private func formatDuration(_ duration: TimeInterval) -> String {
@@ -187,13 +192,13 @@ struct ControlButton: View {
     
     var body: some View {
         Button(action: action) {
-            VStack(spacing: 4) {
+            VStack(spacing: 6) {
                 Image(systemName: systemImage)
-                    .font(.title2)
+                    .font(.system(size: 22, weight: .medium))
                 Text(label)
-                    .font(.caption)
+                    .font(.system(size: 10, weight: .semibold))
             }
-            .foregroundColor(isActive ? .red : .white)
+            .foregroundColor(isActive ? DesignSystem.Colors.accent : DesignSystem.Colors.primaryText)
         }
     }
 }
@@ -206,17 +211,18 @@ struct VideoQualityButton: View {
     
     var body: some View {
         Button(action: action) {
-            VStack(spacing: 4) {
+            VStack(spacing: 6) {
                 Text(quality.rawValue)
-                    .font(.caption.bold())
-                    .padding(.horizontal, 8)
+                    .font(.system(size: 11, weight: .heavy))
+                    .padding(.horizontal, 6)
                     .padding(.vertical, 4)
-                    .background(Color.red.opacity(0.3))
-                    .cornerRadius(4)
+                    .background(DesignSystem.Colors.accent)
+                    .clipShape(RoundedRectangle(cornerRadius: 6))
+                
                 Text("Quality")
-                    .font(.caption)
+                    .font(.system(size: 10, weight: .semibold))
             }
-            .foregroundColor(.white)
+            .foregroundColor(DesignSystem.Colors.primaryText)
         }
     }
 }
@@ -230,24 +236,24 @@ struct RecordButton: View {
     var body: some View {
         Button(action: onTap) {
             ZStack {
-                // Outer ring (reduced 10%: 80 -> 72)
+                // Outer ring
                 Circle()
-                    .stroke(Color.white, lineWidth: 3.5)
-                    .frame(width: 72, height: 72)
+                    .stroke(Color.white.opacity(0.8), lineWidth: 4)
+                    .frame(width: 76, height: 76)
                 
-                // Inner shape (circle when idle, square when recording)
+                // Inner shape
                 if isRecording {
-                    RoundedRectangle(cornerRadius: 7)
-                        .fill(Color.red)
-                        .frame(width: 29, height: 29)
+                    RoundedRectangle(cornerRadius: 8)
+                        .fill(DesignSystem.Colors.accent)
+                        .frame(width: 32, height: 32)
                 } else {
                     Circle()
-                        .fill(Color.red)
-                        .frame(width: 54, height: 54)
+                        .fill(DesignSystem.Colors.accent)
+                        .frame(width: 60, height: 60)
                 }
             }
         }
-        .animation(.spring(response: 0.3), value: isRecording)
+        .animation(.spring(response: 0.3, dampingFraction: 0.6), value: isRecording)
     }
 }
 

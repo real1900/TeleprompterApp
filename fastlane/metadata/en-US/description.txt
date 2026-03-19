@@ -3,7 +3,7 @@ Create Hollywood-Quality Messaging. Right from your iPhone.
 Turn your smartphone into a professional broadcast studio. GoPrompt combines an intelligent teleprompter with a powerful Cinematic Camera, giving you the tools to record flawless, high-quality videos that captivate your audience.
 
 CINEMATIC CAMERA
-• Background Blur: Achieve that professional DSLR look with real-time depth of field processing.
+• Background Blur & Green Screen: Achieve a professional DSLR look with real-time blur or replace your background instantly with a virtual green screen for post-production power.
 • 4K Quality: Record in stunning high resolution with crystal-clear detail.
 • Mobile Studio: Manually adjust Focus, Exposure, White Balance, and ISO for the perfect shot.
 • Perfect Audio: Enhanced audio synchronization ensures your voice is crisp and perfectly timed with the video.

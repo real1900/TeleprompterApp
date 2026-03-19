@@ -17,7 +17,17 @@ class TeleprompterEngine: ObservableObject {
     @Published private(set) var isPaused = false
     
     /// Total content height for scroll bounds
-    @Published var contentHeight: CGFloat = 1000  // Default non-zero
+    @Published var contentHeight: CGFloat = 1000 {
+        didSet {
+            // Auto-clamp when content height shrinks (e.g. font size decrease)
+            // to prevent content from flying off-screen
+            let maxOffset = max(0, contentHeight - visibleHeight)
+            if scrollOffset > maxOffset {
+                scrollOffset = maxOffset
+                print("TeleprompterEngine: Clamped offset to \(maxOffset) due to content resize")
+            }
+        }
+    }
     
     /// Visible height of the teleprompter view
     @Published var visibleHeight: CGFloat = 300   // Default non-zero
@@ -31,11 +41,8 @@ class TeleprompterEngine: ObservableObject {
     var targetWPM: Double = 140
     
     /// Word count of the current script (set externally)
-    var wordCount: Int = 100 {
-        didSet {
-            recalculateSpeed()
-        }
-    }
+    var wordCount: Int = 100
+    // Removed didSet { recalculateSpeed() } to prevent overriding manual speed setting
     
     /// Scroll speed in points per second (calculated from WPM or set manually)
     var scrollSpeed: Double = 50 {
@@ -49,7 +56,7 @@ class TeleprompterEngine: ObservableObject {
         didSet {
             fontSize = min(max(fontSize, TeleprompterSettings.fontSizeRange.lowerBound),
                           TeleprompterSettings.fontSizeRange.upperBound)
-            recalculateSpeed()
+            // Removed recalculateSpeed() to maintain manual speed consistency
         }
     }
     
@@ -101,9 +108,11 @@ class TeleprompterEngine: ObservableObject {
     }
     
     /// Configure for a specific script
+    /// Configure for a specific script
     func configureForScript(_ script: Script) {
         wordCount = script.content.split(separator: " ").count
-        recalculateSpeed()
+        resetToTop() // Ensure scroll starts from the beginning for new scripts
+        // recalculateSpeed() - Disabled to respect manual scroll speed slider
     }
     
     // MARK: - Ease-in Curve

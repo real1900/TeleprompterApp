@@ -1,0 +1,29 @@
+#!/bin/bash
+mkdir -p "StitchDesigns"
+cd StitchDesigns
+
+# Add timeouts to curl to prevent hanging
+CURL_OPTS="-L -s --connect-timeout 5 --max-time 15"
+
+echo "Downloading Script Library..."
+curl $CURL_OPTS -o "ScriptLibrary.png" "https://lh3.googleusercontent.com/aida/ADBb0ujNDmjZgwNfWduQ6rD1cHUs51X9VveVx2jQmk2wQf-VuADnEGfBGhqdV52ZQRQekooE1HvNnaLTxO64l0Ny173Nrmzl4u86E7YsrS2ik_T_rAeabw1_aIITMI2Q-O0rpdFUIx5WnptiI4mZ4BnJD7VptJkCzk5Zf9_pTSSnTgFwp88G-MPV42cq7GYURVn8dAfvwOGv_bAhjA5ikYdLhoktKxJAkPVCPTd_YtrgN9lQAEYMf3NilftC3gw"
+curl $CURL_OPTS -o "ScriptLibrary.html" "https://contribution.usercontent.google.com/download?c=CgthaWRhX2NvZGVmeBJ8Eh1hcHBfY29tcGFuaW9uX2dlbmVyYXRlZF9maWxlcxpbCiVodG1sXzg0M2M4MDA5NTg5NzQ3M2I5OGM5NmIzNjhhNjE2NWExEgsSBxCmgIqWug0YAZIBJAoKcHJvamVjdF9pZBIWQhQxMTkyNzU3Nzc2MDczODc4OTE0MA&filename=&opi=89354086"
+
+echo "Downloading Settings..."
+curl $CURL_OPTS -o "Settings.png" "https://lh3.googleusercontent.com/aida/ADBb0ui_nyLObkPsPAJkVHoi-hNSTtqUsrAOUqde9SFEzkuPBmVinoutCe9PbOaNokTDdphmntkHdPYYhPTgAVVdlA_zFO4QLrxCMKvjp1QHeOHSN2nYxQndC0-qid7_eUCyElcGA0IIwgLtsU_BrdM8nN6a5I-Kb8iVrc0UpnNEnwY6yXHj0sYQ7uR0YCBhaDuFbSsMStTuPj7b42Fzz4hWzG4-viwxYCuWkLK5gB7KNx6L1o5zuAXPraQVKJhq"
+curl $CURL_OPTS -o "Settings.html" "https://contribution.usercontent.google.com/download?c=CgthaWRhX2NvZGVmeBJ8Eh1hcHBfY29tcGFuaW9uX2dlbmVyYXRlZF9maWxlcxpbCiVodG1sX2Y3NWM4OGEyNTM2ODQ5ZWNhYjQyMzRhZTBkNmJiNzE4EgsSBxCmgIqWug0YAZIBJAoKcHJvamVjdF9pZBIWQhQxMTkyNzU3Nzc2MDczODc4OTE0MA&filename=&opi=89354086"
+
+echo "Downloading Recording Gallery..."
+curl $CURL_OPTS -o "RecordingGallery.png" "https://lh3.googleusercontent.com/aida/ADBb0ug2vLJCos2lTHc4HfSSq3tSMYDz3ptSrAMjhUOjw-IgP-LVdZLv5vDTICIOjSeHkYrb4IWuAyh9OSPsCCUWfxI1PFzDYEQrr8xMPJgClxYyDddAo58XYOABilctAh_S8_YkbTx6KzvBT1A6kiRDSOFy3Maw_9Y-kHQEClmo3R0_pUq3XmBsx4kqGQVb0Uxg048Co0yDZHADCfWam4cbG8scdEWRIyLSvbPLTSiWsoglQNaKcAZdfLu7ZjJu"
+curl $CURL_OPTS -o "RecordingGallery.html" "https://contribution.usercontent.google.com/download?c=CgthaWRhX2NvZGVmeBJ8Eh1hcHBfY29tcGFuaW9uX2dlbmVyYXRlZF9maWxlcxpbCiVodG1sXzQyN2QzY2IxYmMyZTQ4ZDQ5Y2M5ZGMxZTJmNTJmZmE3EgsSBxCmgIqWug0YAZIBJAoKcHJvamVjdF9pZBIWQhQxMTkyNzU3Nzc2MDczODc4OTE0MA&filename=&opi=89354086"
+
+echo "Downloading Script Editor..."
+curl $CURL_OPTS -o "ScriptEditor.png" "https://lh3.googleusercontent.com/aida/ADBb0ugSo8qHWtbHr6glz3BqculfymPKXYmURWImXWdMWfatJ8yRzhUUet_0bFXyc3NvP7S8nz7sxVfh78RpSHaNrSLrxIhNdMvDD_XEvF3SV6xbtehS5iZiLVm9NAYfnSREHeaT4J_u0xe_cGqLletse8OoTRIUE4TsIgA6MFlk-bNR9JyIp0_znejTZit-E6EJVfXqAWfp2SLrNwijl3BUCS7pmpTZQ_hMcmzstBGAL07xmUsHR0JkZxwg7VM"
+curl $CURL_OPTS -o "ScriptEditor.html" "https://contribution.usercontent.google.com/download?c=CgthaWRhX2NvZGVmeBJ8Eh1hcHBfY29tcGFuaW9uX2dlbmVyYXRlZF9maWxlcxpbCiVodG1sX2FhZjBlMDY3NzMyMjQ3YTI5MzQzNTY1MTA5ODNjM2I5EgsSBxCmgIqWug0YAZIBJAoKcHJvamVjdF9pZBIWQhQxMTkyNzU3Nzc2MDczODc4OTE0MA&filename=&opi=89354086"
+
+echo "Downloading Recording Screen..."
+curl $CURL_OPTS -o "RecordingScreen.png" "https://lh3.googleusercontent.com/aida/ADBb0uh-5ZjfCSbFIg6bJZtRmcy-Sz2umRFlRQdalZ7Pn7-3uQGSgsKmupP9KMpRvY6l7Az5qycvVUDdAk3pr7_MZtsMDC_UDAe5yQ1Mqr8avn_BtPLU5G8PY6_HPMX4mP1J1bKnguwFZE73pMtgJdB_kKqhnSfIuFS6wxl1gGk_zirBxW4My24xTeedzbiblRm9ZYqwwKikag0jnahIP491GJkK1SGEiEMJtqgLCrJT-IyEzDpuaCZIevzAxu_W"
+curl $CURL_OPTS -o "RecordingScreen.html" "https://contribution.usercontent.google.com/download?c=CgthaWRhX2NvZGVmeBJ8Eh1hcHBfY29tcGFuaW9uX2dlbmVyYXRlZF9maWxlcxpbCiVodG1sXzgyZGVmNzhiMmNlNzQxMTU4YjBhN2FmNjAwMmJhY2FjEgsSBxCmgIqWug0YAZIBJAoKcHJvamVjdF9pZBIWQhQxMTkyNzU3Nzc2MDczODc4OTE0MA&filename=&opi=89354086"
+
+echo "Download Complete!"
+ls -la

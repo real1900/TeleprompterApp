@@ -33,40 +33,48 @@ struct ScriptEditorView: View {
     
     var body: some View {
         NavigationStack {
-            VStack(spacing: 0) {
-                // Title field
-                TextField("Script Title", text: $editableScript.title)
-                    .font(.title2.bold())
+            ZStack {
+                DesignSystem.Colors.background.ignoresSafeArea()
+                
+                VStack(spacing: 0) {
+                    // Title field
+                    TextField("Script Title", text: $editableScript.title)
+                        .font(DesignSystem.Typography.title)
+                        .padding()
+                        .background(DesignSystem.Colors.surface)
+                        .foregroundColor(DesignSystem.Colors.primaryText)
+                    
+                    Divider()
+                        .background(Color.white.opacity(0.1))
+                    
+                    // Content editor
+                    TextEditor(text: $editableScript.content)
+                        .font(DesignSystem.Typography.body)
+                        .padding(.horizontal)
+                        .focused($isContentFocused)
+                        .scrollContentBackground(.hidden)
+                        .background(DesignSystem.Colors.background)
+                        .foregroundColor(DesignSystem.Colors.primaryText)
+                    
+                    // Word count footer
+                    HStack {
+                        Text("\(wordCount) words")
+                            .font(.caption)
+                            .foregroundColor(DesignSystem.Colors.secondaryText)
+                        
+                        Spacer()
+                        
+                        Text("~\(estimatedReadTime) min read")
+                            .font(.caption)
+                            .foregroundColor(DesignSystem.Colors.secondaryText)
+                    }
                     .padding()
-                    .background(Color(.systemBackground))
-                
-                Divider()
-                
-                // Content editor
-                TextEditor(text: $editableScript.content)
-                    .font(.body)
-                    .padding(.horizontal)
-                    .focused($isContentFocused)
-                    .scrollContentBackground(.hidden)
-                    .background(Color(.systemBackground))
-                
-                // Word count footer
-                HStack {
-                    Text("\(wordCount) words")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                    
-                    Spacer()
-                    
-                    Text("~\(estimatedReadTime) min read")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
+                    .background(DesignSystem.Colors.surfaceHighlight)
                 }
-                .padding()
-                .background(Color(.secondarySystemBackground))
             }
             .navigationTitle(isNewScript ? "New Script" : "Edit Script")
             .navigationBarTitleDisplayMode(.inline)
+            .preferredColorScheme(.dark)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") {

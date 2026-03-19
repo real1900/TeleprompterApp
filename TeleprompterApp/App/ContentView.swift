@@ -6,20 +6,22 @@ struct ContentView: View {
     
     enum Tab {
         case scripts
+        case gallery
         case record
         case settings
     }
     
     init() {
-        // Configure tab bar with glass/translucent appearance
+        // Configure tab bar with premium translucent dark appearance
         let appearance = UITabBarAppearance()
         appearance.configureWithTransparentBackground()
-//        appearance.backgroundEffect = UIBlurEffect(style: .systemUltraThinMaterialDark)
-//
+        appearance.backgroundEffect = UIBlurEffect(style: .systemUltraThinMaterialDark)
         
         UITabBar.appearance().standardAppearance = appearance
         UITabBar.appearance().scrollEdgeAppearance = appearance
         
+        // Unselected icon color mapping
+        UITabBar.appearance().unselectedItemTintColor = UIColor(white: 0.6, alpha: 1)
     }
     
     var body: some View {
@@ -29,6 +31,12 @@ struct ContentView: View {
                     Label("Scripts", systemImage: "doc.text")
                 }
                 .tag(Tab.scripts)
+                
+            RecordingGalleryView()
+                .tabItem {
+                    Label("Gallery", systemImage: "photo.on.rectangle")
+                }
+                .tag(Tab.gallery)
             
             RecordingView()
                 .tabItem {
@@ -38,11 +46,12 @@ struct ContentView: View {
             
             SettingsView()
                 .tabItem {
-                    Label("Settings", systemImage: "gear")
+                    Label("Settings", systemImage: "gearshape.fill")
                 }
                 .tag(Tab.settings)
         }
-        .tint(.red)
+        .tint(DesignSystem.Colors.accent)
+        .preferredColorScheme(.dark)
     }
 }
 

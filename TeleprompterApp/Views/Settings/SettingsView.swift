@@ -8,65 +8,71 @@ struct SettingsView: View {
     
     var body: some View {
         NavigationStack {
-            Form {
-                // Text Settings
-                Section {
-                    fontSizeRow
-                    lineSpacingRow
-                    textColorRow
-                } header: {
-                    Text("Text")
-                } footer: {
-                    Text("Adjust the font size and line spacing to match your reading comfort.")
-                }
+            ZStack {
+                DesignSystem.Colors.background.ignoresSafeArea()
                 
-                // Scrolling Settings
-                Section {
-                    scrollSpeedRow
-                } header: {
-                    Text("Scrolling")
-                } footer: {
-                    Text("Slower speeds are better for beginners. The teleprompter pauses when you tap during recording.")
-                }
-                
-                // Appearance Settings
-                Section {
-                    backgroundOpacityRow
-                    mirrorTextRow
-                } header: {
-                    Text("Appearance")
-                }
-                
-                // Recording Settings
-                Section {
-                    countdownToggle
-                    if appState.settings.showCountdown {
-                        countdownDurationRow
+                ScrollView {
+                    VStack(spacing: 24) {
+                        // Text Settings
+                        settingsSection(title: "Text", footer: "Adjust the font size and line spacing to match your reading comfort.") {
+                            fontSizeRow
+                            Divider().background(Color.white.opacity(0.1))
+                            lineSpacingRow
+                            Divider().background(Color.white.opacity(0.1))
+                            textColorRow
+                        }
+                        
+                        // Scrolling Settings
+                        settingsSection(title: "Scrolling", footer: "Slower speeds are better for beginners. The teleprompter pauses when you tap during recording.") {
+                            scrollSpeedRow
+                        }
+                        
+                        // Appearance Settings
+                        settingsSection(title: "Appearance") {
+                            backgroundOpacityRow
+                            Divider().background(Color.white.opacity(0.1))
+                            mirrorTextRow
+                        }
+                        
+                        // Recording Settings
+                        settingsSection(title: "Recording") {
+                            countdownToggle
+                            if appState.settings.showCountdown {
+                                Divider().background(Color.white.opacity(0.1))
+                                countdownDurationRow
+                            }
+                        }
+                        
+                        // Reset Settings
+                        settingsSection(title: "Reset") {
+                            Button(role: .destructive) {
+                                showingResetAlert = true
+                            } label: {
+                                HStack {
+                                    Spacer()
+                                    Text("Reset to Defaults")
+                                        .bold()
+                                    Spacer()
+                                }
+                            }
+                        }
+                        
+                        // App Info
+                        settingsSection(title: "About") {
+                            HStack {
+                                Text("Version")
+                                Spacer()
+                                Text("1.0.0")
+                                    .foregroundColor(DesignSystem.Colors.secondaryText)
+                            }
+                        }
                     }
-                } header: {
-                    Text("Recording")
-                }
-                
-                // Reset Settings
-                Section {
-                    Button("Reset to Defaults", role: .destructive) {
-                        showingResetAlert = true
-                    }
-                }
-                
-                // App Info
-                Section {
-                    HStack {
-                        Text("Version")
-                        Spacer()
-                        Text("1.0.0")
-                            .foregroundColor(.secondary)
-                    }
-                } header: {
-                    Text("About")
+                    .padding(DesignSystem.Layout.paddingStandard)
                 }
             }
             .navigationTitle("Settings")
+            .navigationBarTitleDisplayMode(.large)
+            .preferredColorScheme(.dark)
             .alert("Reset Settings?", isPresented: $showingResetAlert) {
                 Button("Cancel", role: .cancel) {}
                 Button("Reset", role: .destructive) {
@@ -78,6 +84,30 @@ struct SettingsView: View {
             }
             .onChange(of: appState.settings) { _, _ in
                 appState.saveSettings()
+            }
+        }
+    }
+    
+    // MARK: - Section Helper
+    
+    private func settingsSection<Content: View>(title: String, footer: String? = nil, @ViewBuilder content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(title.uppercased())
+                .font(DesignSystem.Typography.caption)
+                .foregroundColor(DesignSystem.Colors.secondaryText)
+                .padding(.leading, 8)
+            
+            VStack(spacing: 16) {
+                content()
+            }
+            .padding(DesignSystem.Layout.paddingStandard)
+            .glassPanel(cornerRadius: DesignSystem.Layout.cornerRadiusStandard)
+            
+            if let footer = footer {
+                Text(footer)
+                    .font(.caption2)
+                    .foregroundColor(DesignSystem.Colors.secondaryText)
+                    .padding(.leading, 8)
             }
         }
     }

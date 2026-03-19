@@ -28,17 +28,24 @@ struct ScriptListView: View {
     
     var body: some View {
         NavigationStack {
-            Group {
-                if storage.isLoading {
-                    ProgressView("Loading scripts...")
-                } else if storage.scripts.isEmpty {
-                    emptyStateView
-                } else {
-                    scriptsCollection
+            ZStack {
+                DesignSystem.Colors.background.ignoresSafeArea()
+                
+                Group {
+                    if storage.isLoading {
+                        ProgressView("Loading scripts...")
+                            .tint(DesignSystem.Colors.accent)
+                    } else if storage.scripts.isEmpty {
+                        emptyStateView
+                    } else {
+                        scriptsCollection
+                    }
                 }
             }
             .navigationTitle("Scripts")
+            .navigationBarTitleDisplayMode(.large)
             .searchable(text: $searchText, placement: .navigationBarDrawer(displayMode: .always), prompt: "Search scripts...")
+            .preferredColorScheme(.dark)
             .toolbar {
                 ToolbarItem(placement: .primaryAction) {
                     Button {
@@ -93,6 +100,7 @@ struct ScriptListView: View {
                 createNewScript()
             }
             .buttonStyle(.borderedProminent)
+            .tint(DesignSystem.Colors.accent)
         }
     }
     
@@ -194,15 +202,12 @@ struct ScriptCardView: View {
                     .foregroundColor(.secondary)
             }
         }
-        .padding(12)
-        .frame(height: 140)
-        .background(
-            RoundedRectangle(cornerRadius: 12)
-                .fill(Color(.secondarySystemBackground))
-        )
+        .padding(16)
+        .frame(height: 150)
+        .glassPanel(cornerRadius: DesignSystem.Layout.cornerRadiusStandard)
         .overlay(
-            RoundedRectangle(cornerRadius: 12)
-                .stroke(isSelected ? Color.green : Color.clear, lineWidth: 2)
+            RoundedRectangle(cornerRadius: DesignSystem.Layout.cornerRadiusStandard)
+                .stroke(isSelected ? DesignSystem.Colors.accent : Color.clear, lineWidth: isSelected ? 2 : 0)
         )
     }
 }

@@ -99,13 +99,12 @@ struct CameraControlsOverlay: View {
                     }
                 }
             }
-            .padding(.horizontal, 16)
+            .padding(.horizontal, DesignSystem.Layout.paddingStandard)
             .padding(.vertical, 12)
-            .background(.ultraThinMaterial)
-            .clipShape(RoundedRectangle(cornerRadius: 16))
-            .padding(.horizontal, 16)
+            .glassPanel(cornerRadius: DesignSystem.Layout.cornerRadiusLarge)
+            .padding(.horizontal, DesignSystem.Layout.paddingStandard)
         }
-        .padding(.horizontal, 16)
+        .padding(.horizontal, DesignSystem.Layout.paddingStandard)
         .sheet(isPresented: $showFilterPicker) {
             FilterPickerSheet(selectedFilter: $cameraService.activeFilter)
                 .presentationDetents([.medium])
@@ -136,9 +135,8 @@ struct CameraControlsOverlay: View {
                 QualityControlPanel(cameraService: cameraService)
             }
         }
-        .padding(16)
-        .background(.ultraThinMaterial)
-        .clipShape(RoundedRectangle(cornerRadius: 16))
+        .padding(DesignSystem.Layout.paddingStandard)
+        .glassPanel(cornerRadius: DesignSystem.Layout.cornerRadiusLarge)
     }
 }
 
@@ -153,12 +151,10 @@ struct ControlPanelButton: View {
     var body: some View {
         Button(action: action) {
             VStack(spacing: 4) {
-                Image(systemName: icon)
-                    .font(.system(size: 18))
                 Text(label)
-                    .font(.caption2)
+                    .font(DesignSystem.Typography.caption)
             }
-            .foregroundColor(isActive ? .red : .white)
+            .foregroundColor(isActive ? DesignSystem.Colors.accent : DesignSystem.Colors.primaryText)
             .frame(minWidth: 50)
         }
     }
@@ -186,10 +182,10 @@ struct FocusControlPanel: View {
                             Text(mode.rawValue)
                                 .font(.caption2)
                         }
-                        .foregroundColor(cameraService.focusMode == mode ? .red : .white)
+                        .foregroundColor(cameraService.focusMode == mode ? DesignSystem.Colors.accent : DesignSystem.Colors.primaryText)
                         .padding(.horizontal, 12)
                         .padding(.vertical, 8)
-                        .background(cameraService.focusMode == mode ? Color.red.opacity(0.2) : Color.clear)
+                        .background(cameraService.focusMode == mode ? DesignSystem.Colors.accent.opacity(0.2) : Color.clear)
                         .cornerRadius(8)
                     }
                 }
@@ -248,10 +244,10 @@ struct ExposureControlPanel: View {
                     } label: {
                         Text(mode.rawValue)
                             .font(.caption)
-                            .foregroundColor(cameraService.exposureMode == mode ? .red : .white)
+                            .foregroundColor(cameraService.exposureMode == mode ? DesignSystem.Colors.accent : DesignSystem.Colors.primaryText)
                             .padding(.horizontal, 10)
                             .padding(.vertical, 6)
-                            .background(cameraService.exposureMode == mode ? Color.red.opacity(0.2) : Color.clear)
+                            .background(cameraService.exposureMode == mode ? DesignSystem.Colors.accent.opacity(0.2) : Color.clear)
                             .cornerRadius(6)
                     }
                 }
@@ -295,15 +291,13 @@ struct WhiteBalanceControlPanel: View {
                             cameraService.whiteBalanceMode = mode
                         } label: {
                             VStack(spacing: 4) {
-                                Image(systemName: mode.systemImage)
-                                    .font(.system(size: 16))
                                 Text(mode.rawValue)
                                     .font(.caption2)
                             }
-                            .foregroundColor(cameraService.whiteBalanceMode == mode ? .red : .white)
+                            .foregroundColor(cameraService.whiteBalanceMode == mode ? DesignSystem.Colors.accent : DesignSystem.Colors.primaryText)
                             .padding(.horizontal, 10)
                             .padding(.vertical, 8)
-                            .background(cameraService.whiteBalanceMode == mode ? Color.red.opacity(0.2) : Color.clear)
+                            .background(cameraService.whiteBalanceMode == mode ? DesignSystem.Colors.accent.opacity(0.2) : Color.clear)
                             .cornerRadius(8)
                         }
                     }
@@ -358,10 +352,10 @@ struct QualityControlPanel: View {
                     } label: {
                         Text(quality.rawValue)
                             .font(.caption.bold())
-                            .foregroundColor(cameraService.videoQuality == quality ? .black : .white)
+                            .foregroundColor(cameraService.videoQuality == quality ? .black : DesignSystem.Colors.primaryText)
                             .padding(.horizontal, 16)
                             .padding(.vertical, 10)
-                            .background(cameraService.videoQuality == quality ? Color.red : Color.white.opacity(0.2))
+                            .background(cameraService.videoQuality == quality ? DesignSystem.Colors.accent : Color.white.opacity(0.2))
                             .cornerRadius(8)
                     }
                 }
@@ -410,7 +404,7 @@ struct DepthControlPanel: View {
                             value: $cameraService.simulatedAperture,
                             in: CinematicCameraService.minAperture...CinematicCameraService.maxAperture
                         )
-                        .tint(.red)
+                        .tint(DesignSystem.Colors.accent)
                         Text("Less blur")
                             .font(.caption2)
                             .foregroundColor(.secondary)
