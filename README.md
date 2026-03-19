@@ -15,39 +15,35 @@ The UI intentionally moves away from a "standard app" aesthetic, embodying **The
 
 ---
 
-## 📸 Stitch Designs vs. Implementation
+## 📸 Application Interface & Functionality
 
-The implementation faithfully matches the high-fidelity mockups generated using **Stitch**, ensuring parity between the intended premium aesthetic and the actual, hardware-backed iOS experience.
+The application faithfully matches these high-fidelity design specifications, ensuring parity between the intended premium aesthetic and the actual, hardware-backed iOS experience.
 
 ### 1. Recording Studio
-| Stitch Design Concept | Live Implementation |
-|:---:|:---:|
-| <img src="StitchDesigns/RecordingScreen.png" width="300" /> | <img src="fastlane/metadata/en-US/screenshots/01_record.png" width="300" /> |
-| *Focus on minimal glass controls and asymmetric balance.* | *Live AVFoundation preview with active teleprompter engine.* |
+<img src="StitchDesigns/RecordingScreen.png" width="250" />
 
-**Key Feature:** Eye Contact Preservation Layout. The script reading zone is mathematically constrained to the top 15% (portrait) and dynamically mapped to the physical location of the camera hardware (landscape), guaranteeing the speaker's eyes never drift from the lens.
+**Functionality:** Focus on minimal glass controls and asymmetric balance.
+**Key Feature:** Eye Contact Preservation Layout. The script reading zone is mathematically constrained to the top 15% (portrait) and dynamically mapped to the physical location of the camera hardware, guaranteeing the speaker's eyes never drift from the lens.
 
 ### 2. Script Library
-| Stitch Design Concept | Live Implementation |
-|:---:|:---:|
-| <img src="StitchDesigns/ScriptLibrary.png" width="300" /> | <img src="fastlane/metadata/en-US/screenshots/02_scripts.png" width="300" /> |
-| *Minimalist typography (Plus Jakarta Sans).* | *Data-driven list mapped to local CoreData/JSON storage.* |
+<img src="StitchDesigns/ScriptLibrary.png" width="250" />
+
+**Functionality:** Minimalist typography (Plus Jakarta Sans). Data-driven list mapped to local CoreData/JSON storage.
 
 ### 3. Rich Text Script Editor
-| Stitch Design Concept | Live Implementation |
-|:---:|:---:|
-| <img src="StitchDesigns/ScriptEditor.png" width="300" /> | <img src="fastlane/metadata/en-US/screenshots/03_editor.png" width="300" /> |
-| *Distraction-free deep writing mode.* | *Real-time keystroke synchronization updating Word Count metrics.* |
+<img src="StitchDesigns/ScriptEditor.png" width="250" />
 
-### 4. Settings & Configuration
-| Stitch Design Concept | Live Implementation |
-|:---:|:---:|
-| <img src="StitchDesigns/Settings.png" width="300" /> | <img src="fastlane/metadata/en-US/screenshots/05_cinematic.png" width="300" /> |
-| *High-contrast metallic toggles.* | *Hardware-coupled context menus mapped to app state.* |
+**Functionality:** Distraction-free deep writing mode. Real-time keystroke synchronization updating Word Count metrics.
 
-### 5. Landscape Pro Mode (Additional View)
-<img src="fastlane/metadata/en-US/screenshots/04_landscape.png" height="300" />
-Maximizes the safe area layout, anchoring the text at a 40% column width immediately adjacent to the physical device lens. Employs **Scroll Continuity Padding** to ensure text scrolls completely off-screen without abruptly cutting off the user's focus.
+### 4. Recording Gallery
+<img src="StitchDesigns/RecordingGallery.png" width="250" />
+
+**Functionality:** Directly review recorded content with quick access playback controls and share options embedded into the premium glass aesthetic.
+
+### 5. Settings & Configuration
+<img src="StitchDesigns/Settings.png" width="250" />
+
+**Functionality:** High-contrast metallic toggles and hardware-coupled context menus mapped to app state (e.g., Cinematic Depth and Green Screen options).
 
 ---
 
