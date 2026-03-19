@@ -1,5 +1,9 @@
 # 🎬 GoPrompt: Professional Cinematic Teleprompter
 
+> [!WARNING]
+> **PROPRIETARY SOURCE CODE**
+> This repository is NOT open-source. It has been made public temporarily and strictly for the purpose of portfolio review and technical evaluation by prospective employers and teams. Any duplication, personal use, or commercial distribution of this codebase without explicit permission is strictly prohibited. See the **Copyright & License** section at the bottom for explicit legal terms.
+
 GoPrompt is a premium iOS Teleprompter application engineered for content creators, broadcasters, and professionals. Designed with a strict focus on **Cinematic Excellence**, it leverages advanced hardware controls, real-time depth processing, and a fluid, physics-based scrolling engine to deliver a seamless and distortion-free recording experience. 
 
 The application is built entirely in **SwiftUI**, integrating deeply with **AVFoundation**, **Metal**, and **CoreML** to provide features typically reserved for high-end studio setups.
@@ -139,3 +143,21 @@ To run the project locally, ensure you have the required development environment
 4. Build and Run (`Cmd + R`).
 
 *Note: For Fastlane deployment and App Store metadata management, reference the `fastlane/` directory.*
+
+---
+
+## ⚖️ Copyright & License (PROPRIETARY)
+
+**© 2026 Suleman Imdad. All Rights Reserved.**
+
+**THIS IS NOT AN OPEN-SOURCE PROJECT.** 
+
+This repository and its contents have been temporarily made public **strictly for the purpose of portfolio review and technical evaluation** by prospective employers, teams, or clients. 
+
+You are granted **read-only access** to view the source code. You are explicitly **prohibited** from:
+- Copying, duplicating, or cloning this codebase for personal or commercial use.
+- Modifying, distributing, or publishing any part of this software.
+- Using any components, UI paradigms, or architectural patterns described herein in your own projects.
+- Submitting this application or any derivative works to the Apple App Store or any other distribution platform.
+
+Any unauthorized use, reproduction, or distribution of this code will be subject to strict legal action under intellectual property and copyright laws.
