@@ -99,7 +99,7 @@ platform :ios do
       api_key: api_key,
       app_identifier: "com.teleprompter1900.app",
       skip_binary_upload: true,
-      skip_screenshots: true,
+      skip_screenshots: false,
       force: true,
       skip_app_version_update: false,
       submit_for_review: false,

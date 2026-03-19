@@ -17,9 +17,11 @@ The UI intentionally moves away from a "standard app" aesthetic, embodying **The
 
 ## 📸 Application Interface & Functionality
 
-*Screenshots will be provided here.*
-
 ### 1. Recording Studio
+
+| iPhone Showcase | iPad Pro Configuration |
+|:---:|:---:|
+| <img src="fastlane/metadata/en-US/screenshots/01_recording.png" height="300" /> | <img src="fastlane/metadata/en-US/screenshots/ipad_01_recording.png" height="300" /> |
 
 **Core Purpose:** The primary capture interface optimized for eye contact and cinematic recording.
 
@@ -33,6 +35,10 @@ The UI intentionally moves away from a "standard app" aesthetic, embodying **The
 
 ### 2. Script Library
 
+| iPhone Showcase | iPad Pro Configuration |
+|:---:|:---:|
+| <img src="fastlane/metadata/en-US/screenshots/02_library.png" height="300" /> | <img src="fastlane/metadata/en-US/screenshots/ipad_02_library.png" height="300" /> |
+
 **Core Purpose:** Fast, local access and management of all teleprompter content.
 
 **Detailed Features:**
@@ -42,6 +48,10 @@ The UI intentionally moves away from a "standard app" aesthetic, embodying **The
 - **No-Line Typographic Boundaries:** Relies strictly on intentional negative space rather than standard 1px borders for separating items, matching the high-end "Obsidian" aesthetic.
 
 ### 3. Rich Text Script Editor
+
+| iPhone Showcase | iPad Pro Configuration |
+|:---:|:---:|
+| <img src="fastlane/metadata/en-US/screenshots/03_editor.png" height="300" /> | <img src="fastlane/metadata/en-US/screenshots/ipad_03_editor.png" height="300" /> |
 
 **Core Purpose:** A distraction-free environment for writing or pasting lengthy speeches.
 
@@ -53,6 +63,10 @@ The UI intentionally moves away from a "standard app" aesthetic, embodying **The
 
 ### 4. Recording Gallery
 
+| iPhone Showcase | iPad Pro Configuration |
+|:---:|:---:|
+| <img src="fastlane/metadata/en-US/screenshots/04_gallery.png" height="300" /> | <img src="fastlane/metadata/en-US/screenshots/ipad_04_gallery.png" height="300" /> |
+
 **Core Purpose:** Post-capture review and system-level sharing of high-resolution `.mp4` video files.
 
 **Detailed Features:**
@@ -62,6 +76,10 @@ The UI intentionally moves away from a "standard app" aesthetic, embodying **The
 - **Native Share Sheet Integration:** Direct hooks to iOS sharing (Airdrop, Messages) for fast offloading to editors or team members.
 
 ### 5. Settings & Configuration
+
+| iPhone Showcase | iPad Pro Configuration |
+|:---:|:---:|
+| <img src="fastlane/metadata/en-US/screenshots/05_settings.png" height="300" /> | <img src="fastlane/metadata/en-US/screenshots/ipad_05_settings.png" height="300" /> |
 
 **Core Purpose:** Professional control over the presentation layer and cinematic computational features.
 
