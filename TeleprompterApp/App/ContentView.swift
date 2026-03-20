@@ -2,6 +2,8 @@ import SwiftUI
 
 struct ContentView: View {
     @EnvironmentObject var appState: AppState
+    @EnvironmentObject var cameraService: CinematicCameraService
+    @Environment(\.scenePhase) private var scenePhase
     @State private var selectedTab: Tab = .record
     
     enum Tab {
@@ -13,32 +15,53 @@ struct ContentView: View {
     
     var body: some View {
         ZStack(alignment: .bottom) {
-            // Main Content Area
-            Group {
-                switch selectedTab {
-                case .scripts:
-                    ScriptListView()
-                case .gallery:
-                    RecordingGalleryView()
-                case .record:
-                    RecordingView()
-                        .safeAreaInset(edge: .bottom) {
-                            // Invisible instance perfectly calculates the dynamic height for the safe area
-                            CustomTabBar(selectedTab: $selectedTab)
-                                .opacity(0)
-                                .allowsHitTesting(false)
-                        }
-                case .settings:
-                    SettingsView()
+            // RecordingView is ALWAYS alive to avoid destroying/recreating
+            // CameraPreviewView (which triggers a 10s+ AVFoundation deadlock
+            // when AVCaptureVideoPreviewLayer is disconnected from a running session).
+            RecordingView()
+                .safeAreaInset(edge: .bottom) {
+                    CustomTabBar(selectedTab: $selectedTab)
+                        .opacity(0)
+                        .allowsHitTesting(false)
                 }
+                .opacity(selectedTab == .record ? 1 : 0)
+                .allowsHitTesting(selectedTab == .record)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            
+            // Other tabs use switch (lightweight, no expensive teardown)
+            if selectedTab != .record {
+                Group {
+                    switch selectedTab {
+                    case .scripts:
+                        ScriptListView()
+                    case .gallery:
+                        RecordingGalleryView()
+                    case .settings:
+                        SettingsView()
+                    case .record:
+                        EmptyView() // Never reached
+                    }
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
             
             // Floating Tab Bar
             CustomTabBar(selectedTab: $selectedTab)
         }
         .ignoresSafeArea(.keyboard, edges: .bottom)
         .preferredColorScheme(.dark)
+        .onChange(of: scenePhase) { _, newPhase in
+            switch newPhase {
+            case .background:
+                cameraService.stopSession()
+            case .active:
+                if selectedTab == .record && !cameraService.isSessionRunning {
+                    cameraService.startSession()
+                }
+            default:
+                break
+            }
+        }
     }
 }
 
@@ -92,6 +115,7 @@ struct CustomTabBar: View {
             RoundedRectangle(cornerRadius: 40, style: .continuous)
                 .fill(Color(hexString: "#2a2a2a").opacity(0.6))
                 .background(.ultraThinMaterial)
+                .clipShape(RoundedRectangle(cornerRadius: 40, style: .continuous))
         }
         .overlay {
             RoundedRectangle(cornerRadius: 40, style: .continuous)
@@ -116,9 +140,14 @@ struct TabBarButton: View {
     
     var body: some View {
         Button(action: {
+            let t = CFAbsoluteTimeGetCurrent()
+            let fmt = DateFormatter()
+            fmt.dateFormat = "HH:mm:ss.SSS"
+            print("⏱️ [\(fmt.string(from: Date()))] [TAB] switching to \(tab) ...")
             withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
                 selectedTab = tab
             }
+            print("⏱️ [\(fmt.string(from: Date()))] [TAB] selectedTab set in \(String(format: "%.3f", CFAbsoluteTimeGetCurrent() - t))s")
         }) {
             VStack(spacing: 4) {
                 Image(systemName: icon)

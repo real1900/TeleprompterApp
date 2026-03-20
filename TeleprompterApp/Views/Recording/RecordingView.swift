@@ -3,7 +3,8 @@ import SwiftUI
 /// Main recording view with camera preview, teleprompter overlay, and controls
 struct RecordingView: View {
     @EnvironmentObject var appState: AppState
-    @StateObject private var cameraService = CinematicCameraService()
+    @EnvironmentObject var settings: TeleprompterSettings
+    @EnvironmentObject var cameraService: CinematicCameraService
     @StateObject private var teleprompterEngine = TeleprompterEngine()
     
     @State private var showSettings = false
@@ -31,28 +32,13 @@ struct RecordingView: View {
             // LAYER 1: Full Screen Background (Video)
             GeometryReader { fullGeo in
                 ZStack {
-                    if (cameraService.depthEnabled || cameraService.greenScreenEnabled || cameraService.activeFilter != .none), 
-                       let processedImage = cameraService.processedPreviewImage {
-                        MetalPreviewView(ciImage: processedImage)
-                            .ignoresSafeArea()
-                            .contentShape(Rectangle())
-                            .gesture(
-                                DragGesture(minimumDistance: 0)
-                                    .onEnded { value in
-                                        handleTapToFocus(at: value.location, in: fullGeo.size)
-                                    }
-                            )
-                    } else {
-                        CameraPreviewView(session: cameraService.captureSession)
-                            .ignoresSafeArea()
-                            .contentShape(Rectangle())
-                            .gesture(
-                                DragGesture(minimumDistance: 0)
-                                    .onEnded { value in
-                                        handleTapToFocus(at: value.location, in: fullGeo.size)
-                                    }
-                            )
-                    }
+                    // Live camera preview — session connected ONLY after startRunning completes
+                    // to prevent AVFoundation's internal dispatch_sync(main) deadlock.
+                    CameraPreviewView(
+                        session: cameraService.captureSession,
+                        isSessionRunning: cameraService.isSessionRunning
+                    )
+                        .ignoresSafeArea()
                     
                     // Focus indicator
                     FocusIndicatorView(
@@ -69,7 +55,6 @@ struct RecordingView: View {
                                 TeleprompterOverlay(
                                     script: appState.currentScript ?? Script.sample,
                                     engine: teleprompterEngine,
-                                    settings: appState.settings,
                                     isLandscape: true
                                 )
                                 .frame(width: fullGeo.size.width * 0.40, height: fullGeo.size.height)
@@ -80,7 +65,6 @@ struct RecordingView: View {
                                 TeleprompterOverlay(
                                     script: appState.currentScript ?? Script.sample,
                                     engine: teleprompterEngine,
-                                    settings: appState.settings,
                                     isLandscape: true
                                 )
                                 .frame(width: fullGeo.size.width * 0.40, height: fullGeo.size.height)
@@ -92,11 +76,9 @@ struct RecordingView: View {
                             TeleprompterOverlay(
                                 script: appState.currentScript ?? Script.sample,
                                 engine: teleprompterEngine,
-                                settings: appState.settings,
                                 isLandscape: false
                             )
                             .frame(height: fullGeo.size.height * 0.45)
-                            .padding(.top, cameraService.isRecording ? 60 : 0) // Leave space for HUD
                             .clipped()
                             Spacer()
                         }
@@ -170,20 +152,27 @@ struct RecordingView: View {
         .toolbar(cameraService.isRecording ? .hidden : .visible, for: .tabBar)
         .animation(.easeInOut(duration: 0.3), value: cameraService.isRecording)
         .task {
+            let t = CFAbsoluteTimeGetCurrent()
             await setupCamera()
+            print("⏱️ [RV] .task setupCamera completed in \(String(format: "%.3f", CFAbsoluteTimeGetCurrent() - t))s")
         }
         .sheet(isPresented: $showSettings) {
              // Let settings sheet handle dismissing correctly to unpause
-            QuickSettingsSheet(settings: $appState.settings)
+            QuickSettingsSheet()
+                .environmentObject(settings)
         }
         .sheet(isPresented: $showScriptPicker) {
             ScriptPickerSheet(selectedScript: $appState.currentScript)
         }
         .onDisappear {
-            if !showSettings && !showScriptPicker {
-                cameraService.stopSession()
-                teleprompterEngine.stopScrolling()
-            }
+            let t = CFAbsoluteTimeGetCurrent()
+            let fmt = DateFormatter(); fmt.dateFormat = "HH:mm:ss.SSS"
+            print("⏱️ [\(fmt.string(from: Date()))] [RV] onDisappear fired")
+            // Only stop scrolling on tab switch; camera session stays alive
+            // to avoid the expensive AVAudioSession teardown that freezes the UI
+            // for ~10 seconds on the first stop/start cycle.
+            teleprompterEngine.stopScrolling()
+            print("⏱️ [\(fmt.string(from: Date()))] [RV] onDisappear completed in \(String(format: "%.3f", CFAbsoluteTimeGetCurrent() - t))s")
         }
         .onReceive(NotificationCenter.default.publisher(for: UIDevice.orientationDidChangeNotification)) { _ in
             let newOrientation = UIDevice.current.orientation
@@ -193,8 +182,13 @@ struct RecordingView: View {
             cameraService.updateVideoOrientation(newOrientation)
         }
         .onAppear {
+            let fmt = DateFormatter(); fmt.dateFormat = "HH:mm:ss.SSS"
+            print("⏱️ [\(fmt.string(from: Date()))] [RV] onAppear fired, isConfigured=\(cameraService.isConfigured), isSessionRunning=\(cameraService.isSessionRunning)")
             UIDevice.current.beginGeneratingDeviceOrientationNotifications()
-            if !cameraService.isSessionRunning && !permissionDenied {
+            // Only restart the session if it was previously configured but stopped
+            // (e.g. returning from background). Never start an unconfigured session —
+            // setupCamera() handles the full configure→start sequence.
+            if cameraService.isConfigured && !cameraService.isSessionRunning && !permissionDenied {
                 cameraService.startSession()
             }
             cameraService.updateVideoOrientation(UIDevice.current.orientation)
@@ -209,9 +203,9 @@ struct RecordingView: View {
                 cameraService.startSession()
             }
         }
-        .onChange(of: appState.settings) { _, _ in
-            syncCameraSettings()
-        }
+        .onChange(of: settings.videoQuality) { _, _ in syncCameraSettings() }
+        .onChange(of: settings.frameRate) { _, _ in syncCameraSettings() }
+        .onChange(of: settings.stabilizationEnabled) { _, _ in syncCameraSettings() }
     }
     
     // MARK: - Methods
@@ -224,6 +218,10 @@ struct RecordingView: View {
     }
     
     private func setupCamera() async {
+        // warmUp() runs at app launch and handles Phase 1 (video-only preview).
+        // Here we just need to handle permissions and fallback if warmUp hasn't finished.
+        print("⏱️ [RV] setupCamera: isConfigured=\(cameraService.isConfigured), isSessionRunning=\(cameraService.isSessionRunning)")
+        
         await cameraService.checkPermissions()
         
         if cameraService.cameraPermission == .notDetermined {
@@ -243,20 +241,28 @@ struct RecordingView: View {
             return
         }
         
+        // If warmUp already configured + started, just apply settings
+        if cameraService.isConfigured && cameraService.isSessionRunning {
+            syncCameraSettings()
+            return
+        }
+        
+        // Fallback: warmUp hasn't completed yet, trigger it
         do {
             try await cameraService.configureSession()
             syncCameraSettings()
-            cameraService.startSession()
         } catch {
             print("Camera setup failed: \(error)")
         }
     }
     
     private func syncCameraSettings() {
+        let fmt = DateFormatter(); fmt.dateFormat = "HH:mm:ss.SSS"
+        print("⏱️ [\(fmt.string(from: Date()))] [RV] syncCameraSettings called")
         cameraService.applyVideoSettings(
-            quality: appState.settings.videoQuality,
-            frameRate: appState.settings.frameRate,
-            stabilization: appState.settings.stabilizationEnabled
+            quality: settings.videoQuality,
+            frameRate: settings.frameRate,
+            stabilization: settings.stabilizationEnabled
         )
     }
     
@@ -282,7 +288,7 @@ struct RecordingView: View {
         guard !isStartingRecording && !cameraService.isRecording else { return }
         showCameraControls = false // dismiss controls if open
         
-        if appState.settings.showCountdown {
+        if settings.showCountdown {
             startCountdown()
         } else {
             startRecording()
@@ -290,7 +296,7 @@ struct RecordingView: View {
     }
     
     private func startCountdown() {
-        countdownValue = appState.settings.countdownDuration
+        countdownValue = settings.countdownDuration
         showCountdown = true
         isStartingRecording = true
         
@@ -309,13 +315,15 @@ struct RecordingView: View {
     
     private func startRecording() {
         isStartingRecording = true
-        if !cameraService.isSessionRunning {
-            cameraService.startSession()
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                self.beginRecording()
-                self.isStartingRecording = false
+        Task {
+            // Ensure audio is wired up before we begin (no-op if already ready)
+            await cameraService.ensureAudioReady()
+            
+            if !cameraService.isSessionRunning {
+                cameraService.startSession()
+                try? await Task.sleep(nanoseconds: 300_000_000) // 0.3s
             }
-        } else {
+            
             beginRecording()
             isStartingRecording = false
         }
@@ -341,7 +349,7 @@ struct RecordingView: View {
                 teleprompterEngine.stopScrolling()
                 teleprompterEngine.resetToTop()
                 
-                let title = appState.currentScript?.title
+                let title = appState.currentScript?.title ?? Script.sample.title
                 try await cameraService.exportToPhotos(videoURL: videoURL, scriptTitle: title)
                 
                 try? FileManager.default.removeItem(at: videoURL)
@@ -477,7 +485,7 @@ struct PermissionDeniedView: View {
 
 // MARK: - Quick Settings Sheet
 struct QuickSettingsSheet: View {
-    @Binding var settings: TeleprompterSettings
+    @EnvironmentObject var settings: TeleprompterSettings
     @Environment(\.dismiss) private var dismiss
     
     var body: some View {
@@ -571,4 +579,5 @@ struct ScriptPickerSheet: View {
 #Preview {
     RecordingView()
         .environmentObject(AppState())
+        .environmentObject(TeleprompterSettings())
 }

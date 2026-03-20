@@ -4,9 +4,8 @@ import CoreImage
 import CoreImage.CIFilterBuiltins
 import Vision
 
-/// Processes video frames using Vision Person Segmentation for Cinematic Blur
-@MainActor
-class DepthBlurProcessor: ObservableObject {
+/// Processes video frames using Vision Person Segmentation for Cinematic Blur sequentially on delegate background threads
+class DepthBlurProcessor {
     
     // MARK: - Properties
     

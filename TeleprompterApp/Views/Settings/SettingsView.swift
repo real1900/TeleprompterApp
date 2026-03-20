@@ -4,6 +4,7 @@ import SwiftUI
 /// Updated to match the high-fidelity native Stitch GoPrompt UI.
 struct SettingsView: View {
     @EnvironmentObject var appState: AppState
+    @EnvironmentObject var settings: TeleprompterSettings
     @State private var showingResetAlert = false
     
     var body: some View {
@@ -36,7 +37,7 @@ struct SettingsView: View {
                                     subtitle: "Horizontal Reflection",
                                     isLast: false
                                 ) {
-                                    Toggle("", isOn: $appState.settings.mirrorText)
+                                    Toggle("", isOn: $settings.mirrorText)
                                         .labelsHidden()
                                         .tint(DesignSystem.Colors.accentContainer)
                                 }
@@ -47,8 +48,8 @@ struct SettingsView: View {
                                     subtitle: "Words per minute",
                                     isLast: false
                                 ) {
-                                    Stepper(value: $appState.settings.scrollSpeed, in: TeleprompterSettings.scrollSpeedRange, step: 5) {
-                                        Text("\(Int(appState.settings.scrollSpeed)) WPM")
+                                    Stepper(value: $settings.scrollSpeed, in: TeleprompterSettings.scrollSpeedRange, step: 5) {
+                                        Text("\(Int(settings.scrollSpeed)) WPM")
                                             .font(DesignSystem.Typography.label)
                                             .foregroundColor(DesignSystem.Colors.secondary)
                                             .bold()
@@ -56,7 +57,7 @@ struct SettingsView: View {
                                     .labelsHidden()
                                     .frame(width: 100)
                                     .overlay(alignment: .leading) {
-                                        Text("\(Int(appState.settings.scrollSpeed)) WPM")
+                                        Text("\(Int(settings.scrollSpeed)) WPM")
                                             .font(DesignSystem.Typography.label)
                                             .foregroundColor(DesignSystem.Colors.secondary)
                                             .bold()
@@ -70,13 +71,13 @@ struct SettingsView: View {
                                     subtitle: "Optimal reading scale",
                                     isLast: true
                                 ) {
-                                    Stepper(value: $appState.settings.fontSize, in: TeleprompterSettings.fontSizeRange, step: 2) {
-                                        Text("\(Int(appState.settings.fontSize))pt")
+                                    Stepper(value: $settings.fontSize, in: TeleprompterSettings.fontSizeRange, step: 2) {
+                                        Text("\(Int(settings.fontSize))pt")
                                     }
                                     .labelsHidden()
                                     .frame(width: 100)
                                     .overlay(alignment: .leading) {
-                                        Text("\(Int(appState.settings.fontSize))pt")
+                                        Text("\(Int(settings.fontSize))pt")
                                             .font(DesignSystem.Typography.label)
                                             .foregroundColor(DesignSystem.Colors.secondaryText)
                                             .offset(x: -50)
@@ -94,7 +95,7 @@ struct SettingsView: View {
                                     subtitle: "Capture Quality",
                                     isLast: false
                                 ) {
-                                    Picker("", selection: $appState.settings.videoQuality) {
+                                    Picker("", selection: $settings.videoQuality) {
                                         ForEach(VideoQuality.allCases) { quality in
                                             Text(quality.rawValue).tag(quality)
                                         }
@@ -109,7 +110,7 @@ struct SettingsView: View {
                                     subtitle: "Cinematic Standard",
                                     isLast: false
                                 ) {
-                                    Picker("", selection: $appState.settings.frameRate) {
+                                    Picker("", selection: $settings.frameRate) {
                                         Text("24 FPS").tag(24)
                                         Text("30 FPS").tag(30)
                                         Text("60 FPS").tag(60)
@@ -124,7 +125,7 @@ struct SettingsView: View {
                                     subtitle: "Digital Gimbal Mode",
                                     isLast: true
                                 ) {
-                                    Toggle("", isOn: $appState.settings.stabilizationEnabled)
+                                    Toggle("", isOn: $settings.stabilizationEnabled)
                                         .labelsHidden()
                                         .tint(DesignSystem.Colors.accentContainer)
                                 }
@@ -188,14 +189,10 @@ struct SettingsView: View {
             .alert("Reset Settings?", isPresented: $showingResetAlert) {
                 Button("Cancel", role: .cancel) {}
                 Button("Reset", role: .destructive) {
-                    appState.settings = .default
-                    appState.saveSettings()
+                    settings.resetToDefaults()
                 }
             } message: {
                 Text("This will reset all settings to their default values.")
-            }
-            .onChange(of: appState.settings) { _, _ in
-                appState.saveSettings()
             }
         }
     }
@@ -271,4 +268,5 @@ struct SettingsRow<Action: View>: View {
 #Preview {
     SettingsView()
         .environmentObject(AppState())
+        .environmentObject(TeleprompterSettings())
 }

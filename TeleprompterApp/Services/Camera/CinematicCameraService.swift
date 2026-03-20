@@ -106,7 +106,14 @@ class CinematicCameraService: NSObject, ObservableObject {
     
     // MARK: - Filters
     
-    @Published var activeFilter: CameraFilter = .none
+    @Published var activeFilter: CameraFilter = .none {
+        didSet { renderStateFilter = activeFilter }
+    }
+    
+    // MARK: - Thread-Safe Render State (Double Buffered for Background Reader)
+    nonisolated(unsafe) var renderStateFilter: CameraFilter = .none
+    nonisolated(unsafe) var renderStateIsWriting: Bool = false
+    nonisolated(unsafe) var renderStateStartTime: CMTime? = nil
     
     // MARK: - Video Quality
     
@@ -121,38 +128,39 @@ class CinematicCameraService: NSObject, ObservableObject {
     
     // MARK: - AVFoundation Components
     
-    nonisolated(unsafe) let captureSession = AVCaptureSession()
+    nonisolated(unsafe) lazy var captureSession = AVCaptureSession()
     nonisolated(unsafe) private var videoDeviceInput: AVCaptureDeviceInput?
     nonisolated(unsafe) private var audioDeviceInput: AVCaptureDeviceInput?
-    nonisolated(unsafe) private let movieFileOutput = AVCaptureMovieFileOutput()
-    
-    // Depth capturing components REMOVED for Center Stage compatibility
-    // Vision-based blur uses standard video frames
+    // DELETED: `movieFileOutput` totally conflicts with VideoDataOutput at an OS-level, producing 10+ second deadlocks on startRunning()
     
     nonisolated(unsafe) private var videoDataOutput: AVCaptureVideoDataOutput?
     nonisolated(unsafe) private var audioDataOutput: AVCaptureAudioDataOutput?
     
-    // Depth processing
-    let depthProcessor = DepthBlurProcessor()
+    // Depth processing (Thread-safe background processor)
+    nonisolated(unsafe) lazy var depthProcessor = DepthBlurProcessor()
     
     // For processed frame preview
     @Published var processedPreviewImage: CIImage?
     
     // Asset writer for recording processed frames
-    private var assetWriter: AVAssetWriter?
-    private var assetWriterVideoInput: AVAssetWriterInput?
-    private var assetWriterAudioInput: AVAssetWriterInput?
-    private var pixelBufferAdaptor: AVAssetWriterInputPixelBufferAdaptor?
-    private var isWritingProcessedVideo = false
-    private var assetWriterStartTime: CMTime?
+    nonisolated(unsafe) private var assetWriter: AVAssetWriter?
+    nonisolated(unsafe) private var assetWriterVideoInput: AVAssetWriterInput?
+    nonisolated(unsafe) private var assetWriterAudioInput: AVAssetWriterInput?
+    nonisolated(unsafe) private var pixelBufferAdaptor: AVAssetWriterInputPixelBufferAdaptor?
+    @Published private var isWritingProcessedVideo = false {
+        didSet { renderStateIsWriting = isWritingProcessedVideo }
+    }
+    private var assetWriterStartTime: CMTime? {
+        didSet { renderStateStartTime = assetWriterStartTime }
+    }
     private var framesWritten: Int = 0
-    // private var depthSyncWritingFrames = false  // REMOVED
     
     // MARK: - Queues
     
     private let sessionQueue = DispatchQueue(label: "com.teleprompter.camera.session")
     private let videoProcessingQueue = DispatchQueue(label: "com.teleprompter.camera.videoProcessing")
     private let audioProcessingQueue = DispatchQueue(label: "com.teleprompter.camera.audioProcessing") // Added Audio Queue
+    private let audioSetupQueue = DispatchQueue(label: "com.teleprompter.camera.audioSetup") // Dedicated queue for audio init
     
     // MARK: - Recording State
     
@@ -163,10 +171,22 @@ class CinematicCameraService: NSObject, ObservableObject {
     
     // MARK: - Dynamic Dimensions
     
-    /// Tracks the actual size of incoming video buffers (Handling orientation & quality)
-    private var lastFrameSize: CGSize?
+    /// Tracks the actual size of incoming video buffers (Handling orientation & quality).
+    /// Written from the nonisolated captureOutput callback, read from setupAssetWriter.
+    nonisolated(unsafe) private var _capturedFrameSize: CGSize?
     
     // MARK: - Initialization
+    
+    /// Compact wall-clock timestamp for timing logs (HH:mm:ss.SSS)
+    nonisolated private static let timestampFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "HH:mm:ss.SSS"
+        return f
+    }()
+    
+    nonisolated private func ts() -> String {
+        Self.timestampFormatter.string(from: Date())
+    }
     
     override init() {
         super.init()
@@ -175,6 +195,10 @@ class CinematicCameraService: NSObject, ObservableObject {
     // MARK: - Permissions
     
     func checkPermissions() async {
+        #if targetEnvironment(simulator)
+        cameraPermission = .authorized
+        microphonePermission = .authorized
+        #else
         switch AVCaptureDevice.authorizationStatus(for: .video) {
         case .notDetermined: cameraPermission = .notDetermined
         case .authorized: cameraPermission = .authorized
@@ -190,23 +214,44 @@ class CinematicCameraService: NSObject, ObservableObject {
         case .restricted: microphonePermission = .restricted
         @unknown default: microphonePermission = .notDetermined
         }
+        #endif
     }
     
     func requestCameraPermission() async -> Bool {
+        #if targetEnvironment(simulator)
+        cameraPermission = .authorized
+        return true
+        #else
         let granted = await AVCaptureDevice.requestAccess(for: .video)
         cameraPermission = granted ? .authorized : .denied
         return granted
+        #endif
     }
     
     func requestMicrophonePermission() async -> Bool {
+        #if targetEnvironment(simulator)
+        microphonePermission = .authorized
+        return true
+        #else
         let granted = await AVCaptureDevice.requestAccess(for: .audio)
         microphonePermission = granted ? .authorized : .denied
         return granted
+        #endif
     }
     
     // MARK: - Session Configuration
     
+    /// Whether the capture session has been fully configured (inputs/outputs wired)
+    @Published private(set) var isConfigured = false
+    
     func configureSession() async throws {
+        guard !isConfigured else { return }
+        
+        // CRITICAL BUG FIX: We MUST evaluate the current TCC status from the OS
+        // *before* blindly calling requestAccess. On iOS Simulators, calling requestAccess 
+        // when permissions are already authorized triggers a catastrophic 25s deadlock in `tccd`.
+        await checkPermissions()
+        
         if cameraPermission == .notDetermined {
             _ = await requestCameraPermission()
         }
@@ -218,132 +263,193 @@ class CinematicCameraService: NSObject, ObservableObject {
             throw CameraError.permissionDenied
         }
         
+        // Fallback path: if warmUp didn't run, do the same two-phase setup
         let quality = videoQuality
-        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
-            sessionQueue.async { [self] in
-                do {
-                    try self.setupSession(quality: quality)
-                    continuation.resume()
-                } catch {
-                    continuation.resume(throwing: error)
+        warmUp(quality: quality)
+    }
+    
+    /// Whether audio input has been added to the capture session (deferred until recording)
+    @Published private(set) var isAudioReady = false
+    
+    /// Two-phase session startup for fast camera preview.
+    ///
+    /// Phase 1 (sessionQueue): Video-only config + startRunning (~3s total).
+    ///   - startRunning with video-only takes ~0.7s (no audio route negotiation).
+    ///   - Preview appears as soon as startRunning returns.
+    ///
+    /// Phase 2 (audioSetupQueue → sessionQueue): Deferred audio addition.
+    ///   - Expensive audio prep (AVAudioSession, mic discovery) runs on audioSetupQueue.
+    ///   - Then stop → addAudio → restart runs on sessionQueue (~7s total).
+    ///   - This does NOT block tab switches because:
+    ///     a) RecordingView is persistent (never destroyed on tab switch)
+    ///     b) CameraPreviewView.dismantleUIView is a no-op
+    ///     c) The work runs entirely on background queues
+    func warmUp(quality: VideoQuality = .medium) {
+        sessionQueue.async { [self] in
+            guard captureSession.inputs.isEmpty else { return }
+            let t0 = CFAbsoluteTimeGetCurrent()
+            
+            captureSession.beginConfiguration()
+            
+            if captureSession.canSetSessionPreset(quality.sessionPreset) {
+                captureSession.sessionPreset = quality.sessionPreset
+            } else {
+                captureSession.sessionPreset = .high
+            }
+            
+            // --- Video input: wide-angle camera (fast) ---
+            guard let camera = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .front) else {
+                captureSession.commitConfiguration()
+                print("⚠️ No front camera available")
+                return
+            }
+            
+            do {
+                let videoInput = try AVCaptureDeviceInput(device: camera)
+                guard captureSession.canAddInput(videoInput) else {
+                    captureSession.commitConfiguration()
+                    return
+                }
+                captureSession.addInput(videoInput)
+                self.videoDeviceInput = videoInput
+            } catch {
+                captureSession.commitConfiguration()
+                print("⚠️ Video input failed: \(error)")
+                return
+            }
+            
+            // --- Video data output ---
+            let videoOutput = AVCaptureVideoDataOutput()
+            videoOutput.setSampleBufferDelegate(self, queue: videoProcessingQueue)
+            videoOutput.videoSettings = [
+                kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA
+            ]
+            videoOutput.alwaysDiscardsLateVideoFrames = true
+            
+            if captureSession.canAddOutput(videoOutput) {
+                captureSession.addOutput(videoOutput)
+                self.videoDataOutput = videoOutput
+                
+                if let connection = videoOutput.connection(with: .video) {
+                    if connection.isVideoMirroringSupported {
+                        connection.isVideoMirrored = true
+                    }
+                    self.updateConnectionOrientation(connection, to: .portrait)
                 }
             }
+            
+            captureSession.commitConfiguration()
+            print("⏱️ [\(self.ts())] [PHASE1] config+commit took \(String(format: "%.3f", CFAbsoluteTimeGetCurrent() - t0))s")
+            
+            // Start video-only session — preview appears after this returns
+            let t1 = CFAbsoluteTimeGetCurrent()
+            captureSession.startRunning()
+            print("⏱️ [\(self.ts())] [PHASE1] startRunning took \(String(format: "%.3f", CFAbsoluteTimeGetCurrent() - t1))s")
+            print("⏱️ [\(self.ts())] [PHASE1] TOTAL video-only: \(String(format: "%.3f", CFAbsoluteTimeGetCurrent() - t0))s")
+            
+            // Publish state — preview is live
+            Task { @MainActor in
+                self.minISO = camera.activeFormat.minISO
+                self.maxISO = camera.activeFormat.maxISO
+                self.isDepthSupported = false
+                if #available(iOS 14.5, *) {
+                    self.isCenterStageSupported = true
+                }
+                self.isConfigured = true
+                self.isSessionRunning = true
+            }
+            
+            // Audio is NOT added here. Adding audio to a session with a connected
+            // AVCaptureVideoPreviewLayer requires stop→config→restart, which blocks
+            // the main thread for 10-20s via AVFoundation internal synchronization.
+            // Audio is deferred to the first recording via ensureAudioReady().
         }
     }
     
-    nonisolated private func setupSession(quality: VideoQuality) throws {
-        // Configure Audio Session for recording
+    /// Phase 2: Add audio input/output to the capture session.
+    ///
+    /// Expensive prep (AVAudioSession, mic discovery, device input creation) runs on
+    /// audioSetupQueue. Session mutation runs on sessionQueue using beginConfiguration/
+    /// commitConfiguration WITHOUT stop→restart. The preview layer is temporarily
+    /// disconnected to prevent AVFoundation's internal dispatch_sync(main) deadlock.
+    nonisolated private func addAudioInput() {
+        guard audioDeviceInput == nil else { return }
+        let t0 = CFAbsoluteTimeGetCurrent()
+        let thread = Thread.current.description
+        print("⏱️ [\(self.ts())] [PHASE2] START on \(thread)")
+        
+        // --- Expensive prep on audioSetupQueue ---
         do {
-            try AVAudioSession.sharedInstance().setCategory(.playAndRecord, mode: .videoRecording, options: [.defaultToSpeaker, .allowBluetoothHFP])
-            try AVAudioSession.sharedInstance().setActive(true)
+            let ta = CFAbsoluteTimeGetCurrent()
+            try AVAudioSession.sharedInstance().setCategory(
+                .playAndRecord,
+                mode: .videoRecording,
+                options: [.defaultToSpeaker]
+            )
+            print("⏱️ [\(self.ts())] [PHASE2] AVAudioSession.setCategory took \(String(format: "%.3f", CFAbsoluteTimeGetCurrent() - ta))s")
         } catch {
-            print("⚠️ Audio session configuration failed: \(error)")
-        }
-
-        captureSession.beginConfiguration()
-        defer { captureSession.commitConfiguration() }
-        
-        if captureSession.canSetSessionPreset(quality.sessionPreset) {
-            captureSession.sessionPreset = quality.sessionPreset
-        } else {
-            captureSession.sessionPreset = .high
+            print("⚠️ Audio session config failed: \(error)")
         }
         
-        // Try TrueDepth camera first (for depth data), then fallback to wide angle
-        var frontCamera: AVCaptureDevice?
-        var hasDepthCapability = false
-        
-        // Check for TrueDepth camera (supports depth)
-        if let trueDepthCamera = AVCaptureDevice.default(.builtInTrueDepthCamera, for: .video, position: .front) {
-            frontCamera = trueDepthCamera
-            hasDepthCapability = true
-            print("Using TrueDepth camera with depth support")
-        } else if let wideAngleCamera = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .front) {
-            frontCamera = wideAngleCamera
-            print("Using wide angle camera (no depth support)")
+        let tb = CFAbsoluteTimeGetCurrent()
+        guard let microphone = AVCaptureDevice.default(for: .audio) else {
+            print("⚠️ No microphone available")
+            return
         }
+        print("⏱️ [\(self.ts())] [PHASE2] mic discovery took \(String(format: "%.3f", CFAbsoluteTimeGetCurrent() - tb))s")
         
-        guard let camera = frontCamera else {
-            throw CameraError.cameraUnavailable
+        let tc = CFAbsoluteTimeGetCurrent()
+        let audioInput: AVCaptureDeviceInput
+        do {
+            audioInput = try AVCaptureDeviceInput(device: microphone)
+        } catch {
+            print("⚠️ Audio input error: \(error)")
+            return
         }
+        print("⏱️ [\(self.ts())] [PHASE2] AVCaptureDeviceInput took \(String(format: "%.3f", CFAbsoluteTimeGetCurrent() - tc))s")
         
-        let videoInput = try AVCaptureDeviceInput(device: camera)
-        guard captureSession.canAddInput(videoInput) else {
-            throw CameraError.setupFailed(NSError(domain: "CinematicCamera", code: -2))
+        let audioOutput = AVCaptureAudioDataOutput()
+        audioOutput.setSampleBufferDelegate(self, queue: audioProcessingQueue)
+        
+        // --- Session mutation on sessionQueue: config-only, NO stop/restart ---
+        // The stop→restart cycle was causing an 18.7s deadlock because stopRunning()
+        // and commitConfiguration() both internally dispatch_sync to the main thread
+        // to negotiate with AVCaptureVideoPreviewLayer. By skipping stop/restart and
+        // just using beginConfiguration/commitConfiguration, we avoid the deadlock.
+        print("⏱️ [\(self.ts())] [PHASE2] about to dispatch to sessionQueue...")
+        let td = CFAbsoluteTimeGetCurrent()
+        sessionQueue.async { [self] in
+            print("⏱️ [\(self.ts())] [PHASE2] entered sessionQueue (waited \(String(format: "%.3f", CFAbsoluteTimeGetCurrent() - td))s)")
+            let session = captureSession
+            
+            let tCfg = CFAbsoluteTimeGetCurrent()
+            session.beginConfiguration()
+            if session.canAddInput(audioInput) {
+                session.addInput(audioInput)
+                audioDeviceInput = audioInput
+                if session.canAddOutput(audioOutput) {
+                    session.addOutput(audioOutput)
+                    audioDataOutput = audioOutput
+                }
+            }
+            session.commitConfiguration()
+            print("⏱️ [\(self.ts())] [PHASE2] beginConfig+add+commit took \(String(format: "%.3f", CFAbsoluteTimeGetCurrent() - tCfg))s")
+            print("⏱️ [\(self.ts())] [PHASE2] session config TOTAL took \(String(format: "%.3f", CFAbsoluteTimeGetCurrent() - td))s")
         }
-        captureSession.addInput(videoInput)
-        videoDeviceInput = videoInput
+        print("⏱️ [\(self.ts())] [PHASE2] addAudioInput TOTAL took \(String(format: "%.3f", CFAbsoluteTimeGetCurrent() - t0))s")
         
-        // Read device capabilities
         Task { @MainActor in
-            self.minISO = camera.activeFormat.minISO
-            self.maxISO = camera.activeFormat.maxISO
-            self.isDepthSupported = hasDepthCapability
-            
-            // Check Center Stage support (iOS 14.5+)
-            if #available(iOS 14.5, *) {
-                self.isCenterStageSupported = true
-            }
+            self.isAudioReady = true
         }
-        
-        // Add audio input
-        if let microphone = AVCaptureDevice.default(for: .audio) {
-            do {
-                let audioInput = try AVCaptureDeviceInput(device: microphone)
-                if captureSession.canAddInput(audioInput) {
-                    captureSession.addInput(audioInput)
-                    audioDeviceInput = audioInput
-                    
-                    // Add Audio Data Output for custom recording
-                    let audioOutput = AVCaptureAudioDataOutput()
-                    audioOutput.setSampleBufferDelegate(self, queue: audioProcessingQueue)
-                    if captureSession.canAddOutput(audioOutput) {
-                        captureSession.addOutput(audioOutput)
-                        audioDataOutput = audioOutput
-                    }
-                }
-            } catch {
-                print("Audio input error: \(error)")
-            }
-        }
-        
-        // Add video data output for frame-by-frame processing
-        let videoOutput = AVCaptureVideoDataOutput()
-        videoOutput.setSampleBufferDelegate(self, queue: videoProcessingQueue)
-        videoOutput.videoSettings = [
-            kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA
-        ]
-        videoOutput.alwaysDiscardsLateVideoFrames = true
-        
-        if captureSession.canAddOutput(videoOutput) {
-            captureSession.addOutput(videoOutput)
-            videoDataOutput = videoOutput
-            
-            if let connection = videoOutput.connection(with: .video) {
-                if connection.isVideoMirroringSupported {
-                    connection.isVideoMirrored = true
-                }
-                
-                // Set initial orientation to portrait
-                self.updateConnectionOrientation(connection, to: .portrait)
-            }
-        }
-        
-        // Note: Depth output logic removed to support Center Stage
-        // We now use Vision-based segmentation on standard video frames
-        
-        // Add movie file output (for non-depth recording fallback)
-        guard captureSession.canAddOutput(movieFileOutput) else {
-            throw CameraError.setupFailed(NSError(domain: "CinematicCamera", code: -3))
-        }
-        captureSession.addOutput(movieFileOutput)
-        
-        if let connection = movieFileOutput.connection(with: .video) {
-            if connection.isVideoStabilizationSupported {
-                connection.preferredVideoStabilizationMode = .auto
-            }
-            if connection.isVideoMirroringSupported {
-                connection.isVideoMirrored = true
+    }
+    
+    /// Ensure audio is wired up before recording. Returns immediately if already ready.
+    func ensureAudioReady() async {
+        guard !isAudioReady else { return }
+        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+            audioSetupQueue.async { [self] in
+                self.addAudioInput()
+                continuation.resume()
             }
         }
     }
@@ -351,25 +457,30 @@ class CinematicCameraService: NSObject, ObservableObject {
     // MARK: - Session Control
     
     func startSession() {
-        let session = captureSession
         sessionQueue.async { [weak self] in
-            guard !session.isRunning else { return }
+            guard let self = self else { return }
+            let session = self.captureSession
+            // Don't start an empty/unconfigured session — it wastes time and
+            // causes contention when setupSession runs later on this serial queue.
+            guard !session.inputs.isEmpty, !session.isRunning else { return }
+            
             session.startRunning()
             
             Task { @MainActor in
-                self?.isSessionRunning = true
+                self.isSessionRunning = true
             }
         }
     }
     
     func stopSession() {
-        let session = captureSession
         sessionQueue.async { [weak self] in
+            guard let self = self else { return }
+            let session = self.captureSession
             guard session.isRunning else { return }
             session.stopRunning()
             
             Task { @MainActor in
-                self?.isSessionRunning = false
+                self.isSessionRunning = false
             }
         }
     }
@@ -608,19 +719,25 @@ class CinematicCameraService: NSObject, ObservableObject {
     
     /// Synchronize Quality, Frame Rate, and Stabilization to Physical Hardware
     func applyVideoSettings(quality: VideoQuality, frameRate: Int, stabilization: Bool) {
+        
         let session = captureSession
         let preset = quality.sessionPreset
+        print("⏱️ [\(ts())] [SETTINGS] applyVideoSettings called (dispatching to sessionQueue)")
         
         sessionQueue.async { [weak self] in
             guard let self = self else { return }
+            let t0 = CFAbsoluteTimeGetCurrent()
+            print("⏱️ [\(self.ts())] [SETTINGS] entered sessionQueue")
             
             // 1. Set Quality
+            let tc = CFAbsoluteTimeGetCurrent()
             session.beginConfiguration()
             if session.canSetSessionPreset(preset) {
                 session.sessionPreset = preset
                 print("🎥 hardware sync: Quality set to \(preset.rawValue)")
             }
             session.commitConfiguration()
+            print("⏱️ [\(self.ts())] [SETTINGS] beginConfig+commit took \(String(format: "%.3f", CFAbsoluteTimeGetCurrent() - tc))s")
             
             // 2. Set Frame Rate
             if let device = self.videoDeviceInput?.device {
@@ -651,13 +768,11 @@ class CinematicCameraService: NSObject, ObservableObject {
             
             // 3. Set Stabilization
             let stabMode: AVCaptureVideoStabilizationMode = stabilization ? .auto : .off
-            if let connection = self.movieFileOutput.connection(with: .video), connection.isVideoStabilizationSupported {
-                connection.preferredVideoStabilizationMode = stabMode
-            }
             if let connection = self.videoDataOutput?.connection(with: .video), connection.isVideoStabilizationSupported {
                 connection.preferredVideoStabilizationMode = stabMode
             }
             print("🎥 hardware sync: Stabilization set to \(stabilization ? "auto" : "off")")
+            print("⏱️ [\(self.ts())] [SETTINGS] applyVideoSettings TOTAL took \(String(format: "%.3f", CFAbsoluteTimeGetCurrent() - t0))s")
         }
     }
     
@@ -665,14 +780,13 @@ class CinematicCameraService: NSObject, ObservableObject {
     
     func updateVideoOrientation(_ orientation: UIDeviceOrientation) {
         let videoOutput = videoDataOutput
-        let movieOutput = movieFileOutput
+        print("⏱️ [\(ts())] [ORIENT] updateVideoOrientation called with \(orientation.rawValue)")
         sessionQueue.async { [self] in
+            print("⏱️ [\(self.ts())] [ORIENT] entered sessionQueue")
             if let dataConnection = videoOutput?.connection(with: .video) {
                 self.updateConnectionOrientation(dataConnection, to: orientation)
             }
-            if let movieConnection = movieOutput.connection(with: .video) {
-                self.updateConnectionOrientation(movieConnection, to: orientation)
-            }
+            print("⏱️ [\(self.ts())] [ORIENT] done")
         }
     }
     
@@ -688,19 +802,11 @@ class CinematicCameraService: NSObject, ObservableObject {
         case .portraitUpsideDown:
             videoOrientation = .portraitUpsideDown
         default:
-            // Fallback to UIWindowScene orientation for .unknown or .faceUp
-            var fallback: AVCaptureVideoOrientation = .portrait
-            DispatchQueue.main.sync {
-                if let windowScene = UIApplication.shared.connectedScenes.first(where: { $0.activationState == .foregroundActive }) as? UIWindowScene {
-                    switch windowScene.interfaceOrientation {
-                    case .landscapeRight: fallback = .landscapeRight
-                    case .landscapeLeft: fallback = .landscapeLeft
-                    case .portraitUpsideDown: fallback = .portraitUpsideDown
-                    default: fallback = .portrait
-                    }
-                }
-            }
-            videoOrientation = fallback
+            // Fallback: assume portrait for .unknown / .faceUp.
+            // IMPORTANT: Do NOT use DispatchQueue.main.sync here — this runs on
+            // sessionQueue, and main.sync risks deadlock if main is waiting on
+            // sessionQueue (e.g. AVCaptureSession internal sync).
+            videoOrientation = .portrait
         }
         
         if connection.isVideoOrientationSupported {
@@ -765,21 +871,13 @@ class CinematicCameraService: NSObject, ObservableObject {
         try? FileManager.default.removeItem(at: outputURL)
         currentVideoURL = outputURL
         
-        // If depth or green screen is enabled, use AVAssetWriter to record processed frames
-        if depthEnabled || greenScreenEnabled {
-            try setupAssetWriter(outputURL: outputURL)
-            // Reset frame tracking state
-            assetWriterStartTime = nil
-            framesWritten = 0
-            isWritingProcessedVideo = true
-        } else {
-            // Use standard movie file output for non-depth recording
-            let output = movieFileOutput
-            sessionQueue.async { [weak self] in
-                guard let self else { return }
-                output.startRecording(to: outputURL, recordingDelegate: self)
-            }
-        }
+        // ALL recordings now use AVAssetWriter to avoid OS-level input/output graph deadlocks
+        // caused by combining AVCaptureMovieFileOutput with VideoDataOutput.
+        try setupAssetWriter(outputURL: outputURL)
+        // Reset frame tracking state
+        assetWriterStartTime = nil
+        framesWritten = 0
+        isWritingProcessedVideo = true
         
         let startTime = Date()
         recordingStartTime = startTime
@@ -800,7 +898,7 @@ class CinematicCameraService: NSObject, ObservableObject {
         var videoWidth: Int
         var videoHeight: Int
         
-        if let size = lastFrameSize {
+        if let size = _capturedFrameSize {
             videoWidth = Int(size.width)
             videoHeight = Int(size.height)
             print("🎥 setupAssetWriter: Using live buffer dimensions: \(videoWidth)x\(videoHeight)")
@@ -882,99 +980,156 @@ class CinematicCameraService: NSObject, ObservableObject {
         print("Asset writer started for depth recording")
     }
     
+    nonisolated func captureOutput(_ output: AVCaptureOutput, didOutput sampleBuffer: CMSampleBuffer, from connection: AVCaptureConnection) {
+        // Handle Video and Audio explicitly sequentially on hardware queue
+        
+        guard let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else { 
+            // If no pixel buffer, it is Audio
+            if let description = CMSampleBufferGetFormatDescription(sampleBuffer) {
+                let mediaType = CMFormatDescriptionGetMediaType(description)
+                if mediaType == kCMMediaType_Audio {
+                    if self.renderStateIsWriting {
+                        self.writeAudioSample(sampleBuffer)
+                    }
+                }
+            }
+            return 
+        }
+        
+        let presentationTime = CMSampleBufferGetPresentationTimeStamp(sampleBuffer)
+        let frameSize = CGSize(width: CVPixelBufferGetWidth(pixelBuffer), height: CVPixelBufferGetHeight(pixelBuffer))
+        
+        // 1. CoreImage Heavy Vision CNN (Background Thread Execution!)
+        var ciImage = CIImage(cvPixelBuffer: pixelBuffer)
+        
+        if self.depthProcessor.isEnabled {
+            if let processedImage = self.depthProcessor.processFrame(videoBuffer: sampleBuffer, depthData: nil) {
+                ciImage = processedImage
+            }
+        }
+        
+        let currentFilter = self.renderStateFilter
+        if currentFilter != .none {
+            if let filtered = self.applyFilter(currentFilter, to: ciImage) {
+                ciImage = filtered
+            }
+        }
+        
+        // 2. Heavy Write I/O (Background Thread Execution!)
+        if self.renderStateIsWriting {
+            if self.renderStateStartTime == nil {
+                self.renderStateStartTime = presentationTime
+                Task { @MainActor in self.assetWriterStartTime = presentationTime } // Sync back to struct state async
+                self.assetWriter?.startSession(atSourceTime: presentationTime)
+                print("🎥 Started AssetWriter Session at \(presentationTime.seconds)")
+            }
+            self.writeProcessedFrame(ciImage, at: presentationTime)
+        }
+        
+        // 3. UI Sync — ONLY when effects are active (depth/greenscreen/filter).
+        // Publishing processedPreviewImage on every frame (30fps) fires objectWillChange
+        // on this @EnvironmentObject, causing SwiftUI to re-evaluate every observing view
+        // 30 times/second — even hidden ones. This floods the main thread and causes
+        // 30+ second UI freezes during tab transitions.
+        // Cache frame size for setupAssetWriter (nonisolated-safe, no main-thread hop).
+        self._capturedFrameSize = frameSize
+        
+        // Only publish processedPreviewImage when effects are active (depth/greenscreen/filter).
+        // Publishing on every frame (30fps) fires objectWillChange on this @EnvironmentObject,
+        // causing SwiftUI to re-evaluate every observing view 30 times/second — even hidden ones.
+        // This floods the main thread and causes 30+ second UI freezes during tab transitions.
+        let needsProcessedPreview = self.depthProcessor.isEnabled || currentFilter != .none
+        if needsProcessedPreview {
+            Task { @MainActor in
+                self.processedPreviewImage = ciImage
+            }
+        }
+    }
+    
     /// Write a processed frame to the asset writer
-    func writeProcessedFrame(_ image: CIImage, at time: CMTime) {
-        guard isWritingProcessedVideo,
+    nonisolated func writeProcessedFrame(_ image: CIImage, at time: CMTime) {
+        guard renderStateIsWriting,
               let adaptor = pixelBufferAdaptor,
               let input = assetWriterVideoInput,
               input.isReadyForMoreMediaData else {
             return
         }
         
-        // Get pixel buffer from pool
-        guard let pixelBufferPool = adaptor.pixelBufferPool else {
-            print("No pixel buffer pool available")
-            return
-        }
-        
+        guard let pixelBufferPool = adaptor.pixelBufferPool else { return }
         var pixelBuffer: CVPixelBuffer?
         CVPixelBufferPoolCreatePixelBuffer(nil, pixelBufferPool, &pixelBuffer)
+        guard let buffer = pixelBuffer else { return }
         
-        guard let buffer = pixelBuffer else {
-            print("Failed to create pixel buffer")
-            return
-        }
-        
-        // Render processed image to pixel buffer
         depthProcessor.render(image, to: buffer)
-        
-        // Append to writer
         adaptor.append(buffer, withPresentationTime: time)
     }
     
     /// Write audio sample buffer
-    func writeAudioSample(_ sampleBuffer: CMSampleBuffer) {
-        guard isWritingProcessedVideo,
+    nonisolated func writeAudioSample(_ sampleBuffer: CMSampleBuffer) {
+        guard renderStateIsWriting,
               let audioInput = assetWriterAudioInput,
               audioInput.isReadyForMoreMediaData,
-              assetWriterStartTime != nil else { // Drop audio until video starts session
+              renderStateStartTime != nil else {
             return
         }
-        
         audioInput.append(sampleBuffer)
     }
     
+    /// Apply a CIFilter to the image using the filter's ciFilterName property
+    nonisolated private func applyFilter(_ filter: CameraFilter, to image: CIImage) -> CIImage? {
+        // ... (body remains identical)
+        guard filter != .none else { return image }
+        
+        guard let filterName = filter.ciFilterName,
+              let ciFilter = CIFilter(name: filterName) else {
+            print("⚠️ Filter: No CIFilter available for \(filter.rawValue)")
+            return image
+        }
+        
+        ciFilter.setValue(image, forKey: kCIInputImageKey)
+        if filter == .sepia {
+            ciFilter.setValue(0.8, forKey: kCIInputIntensityKey)
+        }
+        guard let output = ciFilter.outputImage else {
+            print("⚠️ Filter: \(filter.rawValue) produced no output")
+            return image
+        }
+        return output
+    }
+    
     func stopRecording() async throws -> URL {
-        print("📹 stopRecording: isRecording=\(isRecording), isWritingProcessedVideo=\(isWritingProcessedVideo)")
+        print("📹 stopRecording: isRecording=\(isRecording), isWritingProcessedVideo=\(renderStateIsWriting)")
         
         guard isRecording else {
-            print("❌ stopRecording: Not recording!")
             throw CameraError.recordingFailed(NSError(domain: "CinematicCamera", code: -5))
         }
         
+        isRecording = false
         recordingTimer?.invalidate()
         recordingTimer = nil
         
-        if isWritingProcessedVideo {
-            print("📹 stopRecording: Using AVAssetWriter path")
-            return try await finishAssetWriterRecording()
-        } else {
-            print("📹 stopRecording: Using movieFileOutput path")
-            let output = movieFileOutput
-            return try await withCheckedThrowingContinuation { continuation in
-                recordingContinuation = continuation
-                sessionQueue.async {
-                    output.stopRecording()
+        return try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<URL, Error>) in
+            self.recordingContinuation = continuation
+            
+            // All recordings use AssetWriter
+            isWritingProcessedVideo = false
+            assetWriterVideoInput?.markAsFinished()
+            assetWriterAudioInput?.markAsFinished()
+            
+            let writer = assetWriter
+            assetWriter = nil
+            
+            writer?.finishWriting { [weak self] in
+                guard let self = self else { return }
+                if let error = writer?.error {
+                    self.recordingContinuation?.resume(throwing: error)
+                } else if let url = self.currentVideoURL {
+                    self.recordingContinuation?.resume(returning: url)
+                } else {
+                    self.recordingContinuation?.resume(throwing: CameraError.recordingFailed(NSError(domain: "CinematicCamera", code: -6)))
                 }
+                self.recordingContinuation = nil
             }
-        }
-    }
-    
-    private func finishAssetWriterRecording() async throws -> URL {
-        guard let writer = assetWriter, let url = currentVideoURL else {
-            throw CameraError.recordingFailed(NSError(domain: "CinematicCamera", code: -7))
-        }
-        
-        assetWriterVideoInput?.markAsFinished()
-        assetWriterAudioInput?.markAsFinished()
-        
-        await writer.finishWriting()
-        
-        // Reset state
-        isWritingProcessedVideo = false
-        isRecording = false
-        recordingDuration = 0
-        recordingStartTime = nil
-        assetWriter = nil
-        assetWriterVideoInput = nil
-        assetWriterAudioInput = nil
-        pixelBufferAdaptor = nil
-        
-        if writer.status == .completed {
-            print("Asset writer recording completed: \(url)")
-            return url
-        } else {
-            throw CameraError.recordingFailed(writer.error ?? NSError(domain: "CinematicCamera", code: -8))
         }
     }
     
@@ -1056,7 +1211,7 @@ class CinematicCameraService: NSObject, ObservableObject {
             }
             
             if let title = scriptTitle, let id = localIdentifier {
-                UserDefaults.standard.set(title, forKey: "video_title_\(id)")
+                VideoMetadataCache.shared.saveTitle(title, for: id)
                 print("✅ Export: Saved metadata title '\(title)' for asset \(id)")
             }
             
@@ -1078,137 +1233,12 @@ class CinematicCameraService: NSObject, ObservableObject {
     }
 }
 
-// MARK: - AVCaptureFileOutputRecordingDelegate
-
-extension CinematicCameraService: AVCaptureFileOutputRecordingDelegate {
-    nonisolated func fileOutput(_ output: AVCaptureFileOutput, didStartRecordingTo fileURL: URL, from connections: [AVCaptureConnection]) {
-        print("Recording started to: \(fileURL)")
-    }
-    
-    nonisolated func fileOutput(_ output: AVCaptureFileOutput, didFinishRecordingTo outputFileURL: URL, from connections: [AVCaptureConnection], error: Error?) {
-        print("Recording finished: \(outputFileURL), error: \(String(describing: error))")
-        
-        Task { @MainActor in
-            // Reset all recording state
-            self.isRecording = false
-            self.recordingDuration = 0
-            self.recordingStartTime = nil
-            self.recordingTimer?.invalidate()
-            self.recordingTimer = nil
-            
-            // Resume the continuation
-            if let error {
-                self.recordingContinuation?.resume(throwing: CameraError.recordingFailed(error))
-            } else {
-                self.recordingContinuation?.resume(returning: outputFileURL)
-            }
-            self.recordingContinuation = nil
-            
-            // Ensure session is still running (it should be, but verify)
-            if !self.captureSession.isRunning {
-                print("Warning: Session stopped after recording, restarting...")
-                self.startSession()
-            }
-        }
-    }
-}
-
-// MARK: - AVCaptureVideoDataOutputSampleBufferDelegate & AVCaptureAudioDataOutputSampleBufferDelegate
-
-extension CinematicCameraService: AVCaptureVideoDataOutputSampleBufferDelegate, AVCaptureAudioDataOutputSampleBufferDelegate {
-    nonisolated func captureOutput(_ output: AVCaptureOutput, didOutput sampleBuffer: CMSampleBuffer, from connection: AVCaptureConnection) {
-        // This is called for each video frame AND audio frame
-        // Process frames here for filters or raw preview, and write to asset writer if recording
-        
-        guard let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else { 
-            // If no pixel buffer, it might be audio
-            // Check if this connection is audio
-            let description = CMSampleBufferGetFormatDescription(sampleBuffer)
-            let mediaType = CMFormatDescriptionGetMediaType(description!)
-            
-            if mediaType == kCMMediaType_Audio {
-                Task { @MainActor in
-                    if self.isWritingProcessedVideo {
-                        self.writeAudioSample(sampleBuffer)
-                    }
-                }
-            }
-            return 
-        }
-        
-        let presentationTime = CMSampleBufferGetPresentationTimeStamp(sampleBuffer)
-        
-        Task { @MainActor in
-            // Capture dimensions from live buffer
-            self.lastFrameSize = CGSize(width: CVPixelBufferGetWidth(pixelBuffer), height: CVPixelBufferGetHeight(pixelBuffer))
-            
-            var ciImage = CIImage(cvPixelBuffer: pixelBuffer)
-            
-            // 1. Apply Vision Effects (Blur or Green Screen)
-            // The processor handles the mode internaly based on configuration
-            if self.depthProcessor.isEnabled {
-                // Pass nil for depthData since we are using Vision segmentation
-                if let processedImage = self.depthProcessor.processFrame(videoBuffer: sampleBuffer, depthData: nil) {
-                    ciImage = processedImage
-                }
-            }
-            
-            // 2. Apply Filters (if enabled)
-            if self.activeFilter != .none {
-                if let filtered = self.applyFilter(self.activeFilter, to: ciImage) {
-                    ciImage = filtered
-                }
-            }
-            
-            // 3. Update Preview
-            self.processedPreviewImage = ciImage
-            
-            // 4. Record Frame (if recording processed video)
-            if self.isWritingProcessedVideo {
-                // Determine Start Time from first frame
-                if self.assetWriterStartTime == nil {
-                    self.assetWriterStartTime = presentationTime
-                    self.assetWriter?.startSession(atSourceTime: presentationTime)
-                    print("🎥 Started AssetWriter Session at \(presentationTime.seconds)")
-                }
-                
-                // Write at Source Time (PresentationTime)
-                self.writeProcessedFrame(ciImage, at: presentationTime)
-            }
-        }
-    }
-    
-    /// Apply a CIFilter to the image using the filter's ciFilterName property
-    @MainActor
-    private func applyFilter(_ filter: CameraFilter, to image: CIImage) -> CIImage? {
-        guard filter != .none else { return image }
-        
-        // Use the ciFilterName property from the enum
-        guard let filterName = filter.ciFilterName,
-              let ciFilter = CIFilter(name: filterName) else {
-            print("⚠️ Filter: No CIFilter available for \(filter.rawValue)")
-            return image
-        }
-        
-        ciFilter.setValue(image, forKey: kCIInputImageKey)
-        
-        // Special handling for sepia which needs intensity
-        if filter == .sepia {
-            ciFilter.setValue(0.8, forKey: kCIInputIntensityKey)
-        }
-        
-        guard let output = ciFilter.outputImage else {
-            print("⚠️ Filter: \(filter.rawValue) produced no output")
-            return image
-        }
-        
-        return output
-    }
-}
-
 // MARK: - AVCaptureDataOutputSynchronizerDelegate
 
 // MARK: - AVCaptureDataOutputSynchronizerDelegate
 // Conformance REMOVED - no longer using hardware depth sync
 
 
+extension CinematicCameraService: AVCaptureVideoDataOutputSampleBufferDelegate, AVCaptureAudioDataOutputSampleBufferDelegate {
+    // Protocol implementations are located in the main class body above
+}

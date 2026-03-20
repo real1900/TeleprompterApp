@@ -11,6 +11,8 @@ struct RecordingControlsView: View {
     var onRecordTapped: () -> Void
     var onStopTapped: () -> Void
     
+    private let peachTint = Color(red: 1.0, green: 0.7, blue: 0.66)
+    
     var body: some View {
         if cameraService.isRecording {
             // RECORDING MODE: Simple Stop Button
@@ -45,9 +47,9 @@ struct RecordingControlsView: View {
                     HStack(spacing: 8) {
                         // Settings
                         Button(action: onSettingsTapped) {
-                            Image(systemName: "gearshape.fill")
-                                .font(.system(size: 22))
-                                .foregroundColor(DesignSystem.Colors.secondaryText)
+                            Image(systemName: "gearshape")
+                                .font(.system(size: 20, weight: .semibold))
+                                .foregroundColor(peachTint)
                                 .frame(width: 48, height: 48)
                         }
                         
@@ -57,9 +59,9 @@ struct RecordingControlsView: View {
                                 showCameraControls.toggle()
                             }
                         }) {
-                            Image(systemName: "camera.fill")
-                                .font(.system(size: 22))
-                                .foregroundColor(showCameraControls ? DesignSystem.Colors.primaryText : DesignSystem.Colors.secondaryText)
+                            Image(systemName: "camera.aperture")
+                                .font(.system(size: 20, weight: .semibold))
+                                .foregroundColor(showCameraControls ? Color.white : peachTint)
                                 .frame(width: 48, height: 48)
                         }
                         
@@ -68,37 +70,34 @@ struct RecordingControlsView: View {
                         // MASSIVE RECORD BUTTON
                         Button(action: onRecordTapped) {
                             ZStack {
-                                // Outer Ring
+                                // Outer Thin Ring
                                 Circle()
-                                    .stroke(DesignSystem.Colors.accent.opacity(0.3), lineWidth: 2)
-                                    .frame(width: 68, height: 68)
+                                    .stroke(Color.red.opacity(0.4), lineWidth: 1.5)
+                                    .frame(width: 72, height: 72)
                                     
+                                // Soft Glow
+                                Circle()
+                                    .fill(Color.red.opacity(0.15))
+                                    .frame(width: 64, height: 64)
+                                    .blur(radius: 8)
+
                                 // Main Trigger
                                 Circle()
-                                    .fill(
-                                        LinearGradient(
-                                            colors: [DesignSystem.Colors.accent, DesignSystem.Colors.destructive],
-                                            startPoint: .topLeading,
-                                            endPoint: .bottomTrailing
-                                        )
-                                    )
-                                    .frame(width: 56, height: 56)
-                                    .shadow(color: DesignSystem.Colors.accent.opacity(0.5), radius: 15, x: 0, y: 0)
-                                    .overlay(
-                                        RoundedRectangle(cornerRadius: 4)
-                                            .fill(.white)
-                                            .frame(width: 20, height: 20)
-                                    )
+                                    .fill(Color(red: 1.0, green: 0.35, blue: 0.35))
+                                    .frame(width: 52, height: 52)
+                                    // Deep shadow to glow
+                                    .shadow(color: Color.red.opacity(0.8), radius: 12, x: 0, y: 0)
                             }
                         }
+                        .padding(.horizontal, 4)
                         
                         Spacer()
                         
                         // Script / Documents
                         Button(action: onScriptTapped) {
-                            Image(systemName: "doc.text.fill")
-                                .font(.system(size: 22))
-                                .foregroundColor(DesignSystem.Colors.secondaryText)
+                            Image(systemName: "doc.plaintext")
+                                .font(.system(size: 20, weight: .semibold))
+                                .foregroundColor(peachTint)
                                 .frame(width: 48, height: 48)
                         }
                         
@@ -106,25 +105,23 @@ struct RecordingControlsView: View {
                         Button {
                             cycleVideoQuality()
                         } label: {
-                            HStack(spacing: 2) {
-                                Text(cameraService.videoQuality == .ultra ? "4K" : "HD")
-                                    .font(DesignSystem.Typography.headline.weight(.heavy))
-                                Text(cameraService.videoQuality == .ultra ? "60" : "30")
-                                    .font(DesignSystem.Typography.headline.weight(.bold))
-                            }
-                            .font(.system(size: 11))
-                            .foregroundColor(DesignSystem.Colors.primaryText)
-                            .tracking(-0.5)
-                            .padding(.horizontal, 14)
-                            .padding(.vertical, 8)
-                            .background(Color.white.opacity(0.05))
-                            .overlay(Capsule().stroke(Color.white.opacity(0.1), lineWidth: 1))
-                            .clipShape(Capsule())
+                            Text(cameraService.videoQuality == .ultra ? "4K60" : "HD30")
+                                .font(.system(size: 11, weight: .bold, design: .rounded))
+                                .foregroundColor(.white)
+                                .tracking(1.0)
+                                .lineLimit(1)
+                                .fixedSize(horizontal: true, vertical: false)
+                                .padding(.horizontal, 16)
+                                .padding(.vertical, 12)
+                                .background(Color(white: 0.15))
+                                .clipShape(Capsule())
                         }
+                        .frame(minWidth: 64)
                     }
                     .padding(.horizontal, 16)
-                    .padding(.vertical, 12)
-                    .glassPanel(cornerRadius: 40)
+                    .padding(.vertical, 14)
+                    .background(Color(white: 0.1, opacity: 0.95))
+                    .clipShape(RoundedRectangle(cornerRadius: 40))
                     .shadow(color: Color.black.opacity(0.5), radius: 30, x: 0, y: 20)
                     .padding(.horizontal, 24)
                     .padding(.bottom, 32)

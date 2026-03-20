@@ -2,26 +2,10 @@ import SwiftUI
 import UniformTypeIdentifiers/// Collection of saved scripts with search, create, edit, and delete functionality
 /// Updated to match the high-fidelity native Stitch GoPrompt UI.
 struct ScriptListView: View {
-    @StateObject private var storage = ScriptStorageService()
     @EnvironmentObject var appState: AppState
-    
-    @State private var editingScript: Script?
-    @State private var isCreatingNew = false
-    @State private var searchText = ""
-    @State private var isImporting = false
-    @State private var importError: String? = nil
-    @State private var showErrorAlert = false
-    
-    // Filtered scripts based on search
-    private var filteredScripts: [Script] {
-        if searchText.isEmpty {
-            return storage.scripts
-        }
-        return storage.scripts.filter { script in
-            script.title.localizedCaseInsensitiveContains(searchText) ||
-            script.content.localizedCaseInsensitiveContains(searchText)
-        }
-    }
+    @EnvironmentObject var settings: TeleprompterSettings
+    @EnvironmentObject var storage: ScriptStorageService
+    @StateObject private var viewModel = ScriptListViewModel()
     
     var body: some View {
         NavigationStack {
@@ -31,7 +15,7 @@ struct ScriptListView: View {
                 if storage.isLoading {
                     ProgressView("Loading scripts...")
                         .tint(DesignSystem.Colors.accent)
-                } else if storage.scripts.isEmpty && !isCreatingNew {
+                } else if storage.scripts.isEmpty && !viewModel.isCreatingNew {
                     emptyStateView
                 } else {
                     ScrollView {
@@ -52,7 +36,7 @@ struct ScriptListView: View {
                                 
                                 Spacer()
                                 
-                                Button(action: createNewScript) {
+                                Button(action: viewModel.createNewScript) {
                                     HStack(spacing: 6) {
                                         Image(systemName: "plus")
                                             .font(.system(size: 14, weight: .bold))
@@ -71,21 +55,21 @@ struct ScriptListView: View {
                             .padding(.horizontal, DesignSystem.Layout.paddingLarge)
                             
                             // Search fallback visualization
-                            if filteredScripts.isEmpty && !searchText.isEmpty {
-                                ContentUnavailableView.search(text: searchText)
+                            let filtered = viewModel.filteredScripts(from: storage.scripts)
+                            if filtered.isEmpty && !viewModel.searchText.isEmpty {
+                                ContentUnavailableView.search(text: viewModel.searchText)
                                     .padding(.top, 60)
                             } else {
                                 
                                 // Scripts Layout Grid
                                 VStack(spacing: 16) {
-                                    if let featured = filteredScripts.first {
+                                    if let featured = filtered.first {
                                         FeaturedScriptCardView(
                                             script: featured,
-                                            speedWPM: appState.settings.scrollSpeed,
-                                            onTap: { editScript(featured) },
+                                            speedWPM: settings.scrollSpeed,
+                                            onTap: { viewModel.editScript(featured) },
                                             onUse: { appState.currentScript = featured }
                                         )
-                                        // The featured card context menu is identical to others
                                         .contextMenu {
                                             Button {
                                                 appState.currentScript = featured
@@ -93,7 +77,7 @@ struct ScriptListView: View {
                                                 Label("Use Script", systemImage: "checkmark.circle")
                                             }
                                             Button(role: .destructive) {
-                                                deleteScript(featured)
+                                                viewModel.deleteScript(featured)
                                             } label: {
                                                 Label("Delete", systemImage: "trash")
                                             }
@@ -101,15 +85,15 @@ struct ScriptListView: View {
                                     }
                                     
                                     // Regular Grid for remaining scripts
-                                    let remaining = Array(filteredScripts.dropFirst())
+                                    let remaining = Array(filtered.dropFirst())
                                     if !remaining.isEmpty {
                                         LazyVGrid(columns: [GridItem(.flexible(), spacing: 16), GridItem(.flexible(), spacing: 16)], spacing: 16) {
                                             ForEach(remaining) { script in
                                                 ScriptCardView(
                                                     script: script,
-                                                    speedWPM: appState.settings.scrollSpeed,
+                                                    speedWPM: settings.scrollSpeed,
                                                     isSelected: appState.currentScript?.id == script.id,
-                                                    onTap: { editScript(script) }
+                                                    onTap: { viewModel.editScript(script) }
                                                 )
                                                 .contextMenu {
                                                     Button {
@@ -118,22 +102,21 @@ struct ScriptListView: View {
                                                         Label("Use Script", systemImage: "checkmark.circle")
                                                     }
                                                     Button(role: .destructive) {
-                                                        deleteScript(script)
+                                                        viewModel.deleteScript(script)
                                                     } label: {
                                                         Label("Delete", systemImage: "trash")
                                                     }
                                                 }
                                             }
                                             
-                                            // Import Card Button at the end
-                                            Button(action: { isImporting = true }) {
+                                            // Import Card Button
+                                            Button(action: { viewModel.isImporting = true }) {
                                                 ImportScriptCardView()
                                             }
                                             .buttonStyle(.plain)
                                         }
-                                    } else if filteredScripts.count == 1 {
-                                        // Still show import button if there's only the featured card
-                                        Button(action: { isImporting = true }) {
+                                    } else if filtered.count == 1 {
+                                        Button(action: { viewModel.isImporting = true }) {
                                             ImportScriptCardView()
                                                 .frame(height: 180)
                                         }
@@ -148,30 +131,23 @@ struct ScriptListView: View {
                 }
             }
             .navigationBarHidden(true)
-            .searchable(text: $searchText, placement: .navigationBarDrawer(displayMode: .always), prompt: "Search scripts...")
-            .sheet(item: $editingScript) { script in
+            .searchable(text: $viewModel.searchText, placement: .navigationBarDrawer(displayMode: .always), prompt: "Search scripts...")
+            .sheet(item: $viewModel.editingScript) { editableScript in
                 ScriptEditorView(
-                    script: Binding(
-                        get: { script },
-                        set: { newScript in
-                            if storage.scripts.contains(where: { $0.id == script.id }) {
-                                Task { try? await storage.save(newScript) }
-                            }
-                        }
-                    ),
-                    isNewScript: isCreatingNew,
+                    script: editableScript,
+                    isNewScript: viewModel.isCreatingNew,
                     onSave: { savedScript in
                         Task { await storage.loadScripts() }
-                        editingScript = nil
+                        viewModel.editingScript = nil
                     },
                     onDelete: {
-                        Task { try? await storage.delete(script) }
-                        editingScript = nil
+                        Task { try? await storage.delete(editableScript) }
+                        viewModel.editingScript = nil
                     }
                 )
             }
             .fileImporter(
-                isPresented: $isImporting,
+                isPresented: $viewModel.isImporting,
                 allowedContentTypes: [
                     .pdf, 
                     .plainText, 
@@ -181,14 +157,15 @@ struct ScriptListView: View {
                 ],
                 allowsMultipleSelection: false
             ) { result in
-                handleImportResult(result)
+                viewModel.handleImportResult(result)
             }
-            .alert("Import Error", isPresented: $showErrorAlert, presenting: importError) { _ in
+            .alert("Import Error", isPresented: $viewModel.showErrorAlert, presenting: viewModel.importError) { _ in
                 Button("OK", role: .cancel) { }
             } message: { error in
                 Text(error)
             }
             .task {
+                viewModel.storage = storage
                 await storage.loadScripts()
             }
         }
@@ -200,7 +177,7 @@ struct ScriptListView: View {
         } description: {
             Text("Create your first prompter script to start the engine.")
         } actions: {
-            Button(action: createNewScript) {
+            Button(action: viewModel.createNewScript) {
                 Text("Start Production")
                     .font(DesignSystem.Typography.headline)
                     .padding(.horizontal, 24)
@@ -209,59 +186,6 @@ struct ScriptListView: View {
                     .foregroundColor(.white)
                     .cornerRadius(12)
             }
-        }
-    }
-    
-    // MARK: - Methods
-    
-    private func createNewScript() {
-        isCreatingNew = true
-        editingScript = storage.createNewScript()
-    }
-    
-    private func editScript(_ script: Script) {
-        isCreatingNew = false
-        editingScript = script
-    }
-    
-    private func deleteScript(_ script: Script) {
-        Task {
-            try? await storage.delete(script)
-        }
-    }
-    
-    private func handleImportResult(_ result: Result<[URL], Error>) {
-        switch result {
-        case .success(let urls):
-            guard let url = urls.first else { return }
-            
-            Task {
-                do {
-                    let imported = try await DocumentImportService.extractText(from: url)
-                    
-                    // Create new script
-                    let newScript = Script(
-                        title: imported.defaultTitle,
-                        content: imported.content,
-                        createdAt: Date(),
-                        updatedAt: Date()
-                    )
-                    
-                    // Set as editing and isCreatingNew
-                    await MainActor.run {
-                        self.isCreatingNew = true
-                        self.editingScript = newScript
-                    }
-                } catch {
-                    await MainActor.run {
-                        self.importError = error.localizedDescription
-                        self.showErrorAlert = true
-                    }
-                }
-            }
-        case .failure(let error):
-            importError = error.localizedDescription
-            showErrorAlert = true
         }
     }
 }
@@ -475,4 +399,73 @@ struct ImportScriptCardView: View {
 #Preview {
     ScriptListView()
         .environmentObject(AppState())
+}
+import SwiftUI
+import UniformTypeIdentifiers
+
+@MainActor
+class ScriptListViewModel: ObservableObject {
+    @Published var searchText = ""
+    @Published var editingScript: Script?
+    @Published var isCreatingNew = false
+    @Published var isImporting = false
+    @Published var importError: String? = nil
+    @Published var showErrorAlert = false
+    
+    // Using a weak reference specifically to avoid retain cycles with a persistent global environment object
+    weak var storage: ScriptStorageService?
+    
+    func filteredScripts(from allScripts: [Script]) -> [Script] {
+        if searchText.isEmpty { return allScripts }
+        return allScripts.filter { script in
+            script.title.localizedCaseInsensitiveContains(searchText) ||
+            script.content.localizedCaseInsensitiveContains(searchText)
+        }
+    }
+    
+    func createNewScript() {
+        guard let storage = storage else { return }
+        isCreatingNew = true
+        editingScript = storage.createNewScript()
+    }
+    
+    func editScript(_ script: Script) {
+        isCreatingNew = false
+        editingScript = script
+    }
+    
+    func deleteScript(_ script: Script) {
+        Task {
+            try? await storage?.delete(script)
+        }
+    }
+    
+    func handleImportResult(_ result: Result<[URL], Error>) {
+        switch result {
+        case .success(let urls):
+            guard let url = urls.first else { return }
+            
+            Task {
+                do {
+                    let imported = try await DocumentImportService.extractText(from: url)
+                    
+                    let newScript = Script(
+                        title: imported.defaultTitle,
+                        content: imported.content,
+                        createdAt: Date(),
+                        updatedAt: Date()
+                    )
+                    
+                    self.isCreatingNew = true
+                    self.editingScript = newScript
+                } catch {
+                    self.importError = error.localizedDescription
+                    self.showErrorAlert = true
+                }
+            }
+        case .failure(let error):
+            importError = error.localizedDescription
+            showErrorAlert = true
+        }
+    }
 }

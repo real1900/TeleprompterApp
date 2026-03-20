@@ -5,7 +5,7 @@ import SwiftUI
 struct TeleprompterOverlay: View {
     let script: Script
     @ObservedObject var engine: TeleprompterEngine
-    let settings: TeleprompterSettings
+    @EnvironmentObject var settings: TeleprompterSettings
     let isLandscape: Bool  // Passed from parent to avoid GeometryReader detection issues
     
     // Track drag gesture starting offset
@@ -66,12 +66,19 @@ struct TeleprompterOverlay: View {
                         .frame(width: isLandscape ? landscapeColumnWidth : columnWidth)
                         .background(GeometryReader { contentGeometry in
                             Color.clear
-                                .onAppear {
-                                    engine.contentHeight = contentGeometry.size.height
+                                /*.onAppear {
+                                    DispatchQueue.main.async {
+                                        engine.contentHeight = contentGeometry.size.height
+                                    }
                                 }
                                 .onChange(of: contentGeometry.size.height) { _, newHeight in
-                                    engine.contentHeight = newHeight
-                                }
+                                    // PREVENT LIVELOCK
+                                    if abs(engine.contentHeight - newHeight) > 1.0 {
+                                        DispatchQueue.main.async {
+                                            engine.contentHeight = newHeight
+                                        }
+                                    }
+                                }*/
                         })
                         .offset(y: -engine.scrollOffset)
                     }
@@ -127,10 +134,20 @@ struct TeleprompterOverlay: View {
                     )
             }
             .onAppear {
-                engine.visibleHeight = geometry.size.height
-                engine.scrollSpeed = settings.scrollSpeed
-                engine.fontSize = settings.fontSize
+                DispatchQueue.main.async {
+                    // engine.visibleHeight = geometry.size.height
+                    engine.scrollSpeed = settings.scrollSpeed
+                    engine.fontSize = settings.fontSize
+                }
             }
+            /*.onChange(of: geometry.size.height) { _, newHeight in
+                // PREVENT LIVELOCK: Fractional layout threshold
+                if abs(engine.visibleHeight - newHeight) > 1.0 {
+                    DispatchQueue.main.async {
+                        engine.visibleHeight = newHeight
+                    }
+                }
+            }*/
             .onChange(of: settings.scrollSpeed) { _, newSpeed in
                 engine.scrollSpeed = newSpeed
             }
@@ -150,9 +167,9 @@ struct TeleprompterOverlay: View {
         TeleprompterOverlay(
             script: Script.sample,
             engine: TeleprompterEngine(),
-            settings: TeleprompterSettings.default,
             isLandscape: false
         )
+        .environmentObject(TeleprompterSettings())
         .frame(height: 300)
     }
 }

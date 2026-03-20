@@ -2,44 +2,57 @@ import Foundation
 import SwiftUI
 
 /// User preferences for the teleprompter display and behavior
-struct TeleprompterSettings: Codable, Equatable {
+@MainActor
+class TeleprompterSettings: ObservableObject {
+    
+    // MARK: - AppStorage Properties
+    
     /// Font size for the teleprompter text (16-72 points)
-    var fontSize: CGFloat
+    @AppStorage("ts_fontSize") var fontSize: Double = 28
     
     /// Scroll speed in points per second (10-200)
-    var scrollSpeed: Double
+    @AppStorage("ts_scrollSpeed") var scrollSpeed: Double = 50
     
     /// Text color for the teleprompter
-    var textColorHex: String
+    @AppStorage("ts_textColorHex") var textColorHex: String = "#FFFFFF"
     
     /// Background opacity for the teleprompter overlay (0.0-1.0)
-    var backgroundOpacity: Double
+    @AppStorage("ts_backgroundOpacity") var backgroundOpacity: Double = 0.6
     
     /// Line spacing multiplier
-    var lineSpacing: CGFloat
+    @AppStorage("ts_lineSpacing") var lineSpacing: Double = 8
     
     /// Horizontal padding from screen edges
-    var horizontalPadding: CGFloat
+    @AppStorage("ts_horizontalPadding") var horizontalPadding: Double = 20
     
     /// Mirror text horizontally (for external teleprompter setups)
-    var mirrorText: Bool
+    @AppStorage("ts_mirrorText") var mirrorText: Bool = false
     
     /// Show countdown before recording starts
-    var showCountdown: Bool
+    @AppStorage("ts_showCountdown") var showCountdown: Bool = true
     
     /// Countdown duration in seconds
-    var countdownDuration: Int
+    @AppStorage("ts_countdownDuration") var countdownDuration: Int = 3
     
     // MARK: - Camera Settings
     
+    /// Raw representation for VideoQuality since AppStorage doesn't natively support custom Enums
+    @AppStorage("ts_videoQualityRaw") private var videoQualityRaw: String = VideoQuality.medium.rawValue
+    
     /// Video capture resolution (e.g. 1080p, 4K)
-    var videoQuality: VideoQuality
+    var videoQuality: VideoQuality {
+        get { VideoQuality(rawValue: videoQualityRaw) ?? .medium }
+        set {
+            videoQualityRaw = newValue.rawValue
+            objectWillChange.send()
+        }
+    }
     
     /// Video frame rate (e.g. 24, 30, 60)
-    var frameRate: Int
+    @AppStorage("ts_frameRate") var frameRate: Int = 30
     
     /// Enable video stabilization
-    var stabilizationEnabled: Bool
+    @AppStorage("ts_stabilizationEnabled") var stabilizationEnabled: Bool = true
     
     // MARK: - Computed Properties
     
@@ -51,26 +64,26 @@ struct TeleprompterSettings: Codable, Equatable {
         Color.black.opacity(backgroundOpacity)
     }
     
-    // MARK: - Static Defaults
+    // MARK: - Operations
     
-    static let `default` = TeleprompterSettings(
-        fontSize: 28,
-        scrollSpeed: 50,
-        textColorHex: "#FFFFFF",
-        backgroundOpacity: 0.6,
-        lineSpacing: 8,
-        horizontalPadding: 20,
-        mirrorText: false,
-        showCountdown: true,
-        countdownDuration: 3,
-        videoQuality: .medium,
-        frameRate: 30,
-        stabilizationEnabled: true
-    )
+    func resetToDefaults() {
+        fontSize = 28
+        scrollSpeed = 50
+        textColorHex = "#FFFFFF"
+        backgroundOpacity = 0.6
+        lineSpacing = 8
+        horizontalPadding = 20
+        mirrorText = false
+        showCountdown = true
+        countdownDuration = 3
+        videoQuality = .medium
+        frameRate = 30
+        stabilizationEnabled = true
+    }
     
     // MARK: - Ranges
     
-    static let fontSizeRange: ClosedRange<CGFloat> = 16...72
+    static let fontSizeRange: ClosedRange<Double> = 16...72
     static let scrollSpeedRange: ClosedRange<Double> = 10...200
     static let opacityRange: ClosedRange<Double> = 0.3...1.0
 }

@@ -1,11 +1,12 @@
 import SwiftUI
 import Photos
 import AVKit
+import CoreData
 
 struct VideoAsset: Identifiable {
-    let id = UUID()
+    var id: String { phAsset.localIdentifier }
     let phAsset: PHAsset
-    let title: String
+    var title: String
     let durationString: String
     let creationDateString: String
     let qualityString: String
@@ -37,57 +38,80 @@ class GalleryViewModel: ObservableObject {
     }
     
     func requestPermissionAndLoad() {
-        PHPhotoLibrary.requestAuthorization(for: .readWrite) { [weak self] status in
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            #if targetEnvironment(simulator)
             DispatchQueue.main.async {
-                if status == .authorized || status == .limited {
+                self?.permissionGranted = true
+                self?.loadVideos()
+            }
+            #else
+            let status = PHPhotoLibrary.authorizationStatus(for: .readWrite)
+            
+            if status == .authorized || status == .limited {
+                DispatchQueue.main.async {
                     self?.permissionGranted = true
                     self?.loadVideos()
                 }
+            } else if status == .notDetermined {
+                PHPhotoLibrary.requestAuthorization(for: .readWrite) { newStatus in
+                    DispatchQueue.main.async {
+                        if newStatus == .authorized || newStatus == .limited {
+                            self?.permissionGranted = true
+                            self?.loadVideos()
+                        }
+                    }
+                }
             }
+            #endif
         }
     }
     
     func loadVideos() {
-        let fetchOptions = PHFetchOptions()
-        fetchOptions.sortDescriptors = [NSSortDescriptor(key: "creationDate", ascending: false)]
-        
-        let albumFetchOptions = PHFetchOptions()
-        albumFetchOptions.predicate = NSPredicate(format: "title = %@", "GoPrompt")
-        let collection = PHAssetCollection.fetchAssetCollections(with: .album, subtype: .any, options: albumFetchOptions)
-        
-        guard let album = collection.firstObject else {
-            DispatchQueue.main.async { self.videos = [] }
-            return
-        }
-        
-        let fetchResult = PHAsset.fetchAssets(in: album, options: fetchOptions)
-        var loadedVideos: [VideoAsset] = []
-        
-        let dateFormatter = DateFormatter()
-        dateFormatter.dateFormat = "MMM d, yyyy • HH:mm"
-        
-        fetchResult.enumerateObjects { (asset, count, stop) in
-            guard asset.mediaType == .video else { return }
-            if count >= 40 { stop.pointee = true; return }
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            guard let self = self else { return }
+            let loadStart = CFAbsoluteTimeGetCurrent()
             
-            let durationString = self.formatDuration(asset.duration)
-            let dateString = asset.creationDate.map { dateFormatter.string(from: $0) } ?? "Unknown Date"
-            let quality = "\(asset.pixelHeight)P"
+            // 1. Fetch CoreData map for explicitly recorded videos
+            let metaPayload = VideoMetadataCache.shared.getAllMetadata()
+            let titleMap = Dictionary(uniqueKeysWithValues: metaPayload.map { ($0.localIdentifier, $0.title ?? "Recording") })
+            let identifiers = metaPayload.map { $0.localIdentifier }
             
-            // Retrieve custom title from UserDefaults linked to localIdentifier
-            let customTitle = UserDefaults.standard.string(forKey: "video_title_\(asset.localIdentifier)") ?? "Recording"
+            guard !identifiers.isEmpty else {
+                DispatchQueue.main.async { self.videos = [] }
+                return
+            }
             
-            loadedVideos.append(VideoAsset(
-                phAsset: asset,
-                title: customTitle,
-                durationString: durationString,
-                creationDateString: dateString,
-                qualityString: quality
-            ))
-        }
-        
-        DispatchQueue.main.async {
-            self.videos = loadedVideos
+            // 2. Fetch EXACT assets from camera roll using CoreData identifiers (No fallback scans needed)
+            let fetchOptions = PHFetchOptions()
+            let fetchResult = PHAsset.fetchAssets(withLocalIdentifiers: identifiers, options: fetchOptions)
+            
+            var initialVideos: [VideoAsset] = []
+            let dateFormatter = DateFormatter()
+            dateFormatter.dateFormat = "MMM d, yyyy • HH:mm"
+            
+            fetchResult.enumerateObjects { (asset, _, _) in
+                guard asset.mediaType == .video else { return }
+                
+                let durationString = self.formatDuration(asset.duration)
+                let dateString = asset.creationDate.map { dateFormatter.string(from: $0) } ?? "Unknown Date"
+                let quality = "\(asset.pixelHeight)P"
+                
+                initialVideos.append(VideoAsset(
+                    phAsset: asset,
+                    title: titleMap[asset.localIdentifier] ?? "GoPrompt Recording",
+                    durationString: durationString,
+                    creationDateString: dateString,
+                    qualityString: quality
+                ))
+            }
+            
+            // Sort by freshest recordings first
+            initialVideos.sort { ($0.phAsset.creationDate ?? Date.distantPast) > ($1.phAsset.creationDate ?? Date.distantPast) }
+            
+            // Update UI
+            DispatchQueue.main.async {
+                self.videos = initialVideos
+            }
         }
     }
     
@@ -119,13 +143,18 @@ struct PHAssetThumbnailView: View {
     }
     
     private func loadImage() {
-        let manager = PHImageManager.default()
-        let options = PHImageRequestOptions()
-        options.isNetworkAccessAllowed = true
-        options.deliveryMode = .opportunistic
-        
-        manager.requestImage(for: asset, targetSize: size, contentMode: .aspectFill, options: options) { result, _ in
-            if let result = result { self.image = result }
+        DispatchQueue.global(qos: .userInitiated).async {
+            let manager = PHImageManager.default()
+            let options = PHImageRequestOptions()
+            options.isNetworkAccessAllowed = true
+            options.deliveryMode = .opportunistic
+            options.isSynchronous = false // CRITICAL: Stop 10s UI thread locks downloading massive poster frames!
+            
+            manager.requestImage(for: asset, targetSize: size, contentMode: .aspectFill, options: options) { result, _ in
+                DispatchQueue.main.async {
+                    if let result = result { self.image = result }
+                }
+            }
         }
     }
 }
@@ -141,70 +170,91 @@ struct RecordingGalleryView: View {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 24) {
                         
-                        // Header
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text("Gallery")
-                                .font(DesignSystem.Typography.largeTitle)
-                                .foregroundColor(DesignSystem.Colors.primaryText)
-                            Text("\(viewModel.filteredVideos.count) Recorded Takes")
-                                .font(DesignSystem.Typography.label)
-                                .foregroundColor(DesignSystem.Colors.secondaryText)
-                                .tracking(1.0)
+                        // Top Nav Bar
+                        HStack {
+                            Spacer()
+                            Text("GOPROMPT")
+                                .font(.system(size: 14, weight: .black))
+                                .foregroundColor(.white)
+                                .tracking(2.0)
+                            Spacer()
                         }
-                        .padding(.top, 40)
+                        .padding(.top, 16)
+                        .overlay(
+                            HStack {
+                                Spacer()
+                                Image(systemName: "person.crop.circle.fill")
+                                    .font(.system(size: 28))
+                                    .foregroundColor(Color(red: 1.0, green: 0.8, blue: 0.7))
+                            }
+                            .padding(.top, 16)
+                        )
                         
-                        // Asymmetrical Filter Row
-                        HStack(spacing: 8) {
+                        // Header
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text("Gallery")
+                                .font(.system(size: 34, weight: .bold))
+                                .foregroundColor(.white)
+                            Text("\(viewModel.filteredVideos.count) Recorded Takes")
+                                .font(.system(size: 15))
+                                .foregroundColor(Color(white: 0.6))
+                        }
+                        .padding(.top, 20)
+                        
+                        // Filters
+                        HStack(spacing: 12) {
                             Button(action: { viewModel.loadVideos() }) {
                                 HStack(spacing: 8) {
                                     Image(systemName: "line.3.horizontal.decrease")
-                                        .foregroundColor(DesignSystem.Colors.secondary)
+                                        .font(.system(size: 14, weight: .semibold))
+                                        .foregroundColor(Color(red: 0.89, green: 0.76, blue: 0.44)) // Gold tint
                                     Text("Filter")
                                         .font(.system(size: 14, weight: .medium))
-                                        .foregroundColor(DesignSystem.Colors.primaryText)
+                                        .foregroundColor(.white)
                                 }
                                 .padding(.horizontal, 16)
-                                .padding(.vertical, 8)
-                                .glassPanel(cornerRadius: 12)
+                                .padding(.vertical, 10)
+                                .background(Color(white: 0.15))
+                                .cornerRadius(12)
                             }
                             
                             Button(action: openPhotosApp) {
                                 HStack(spacing: 8) {
-                                    Image(systemName: "arrow.up.arrow.down")
-                                        .foregroundColor(DesignSystem.Colors.secondary)
+                                    Image(systemName: "line.3.horizontal.decrease")
+                                        .font(.system(size: 14, weight: .semibold))
+                                        .foregroundColor(Color(red: 0.89, green: 0.76, blue: 0.44)) // Gold tint
                                     Text("Date")
                                         .font(.system(size: 14, weight: .medium))
-                                        .foregroundColor(DesignSystem.Colors.primaryText)
+                                        .foregroundColor(.white)
                                 }
                                 .padding(.horizontal, 16)
-                                .padding(.vertical, 8)
-                                .glassPanel(cornerRadius: 12)
+                                .padding(.vertical, 10)
+                                .background(Color(white: 0.15))
+                                .cornerRadius(12)
                             }
                             
                             Spacer()
-                            
-                            // Search bar taking remaining space
-                            HStack {
-                                Image(systemName: "magnifyingglass")
-                                    .foregroundColor(DesignSystem.Colors.secondaryText)
-                                TextField("Search scripts...", text: $viewModel.searchText)
-                                    .font(.system(size: 14))
-                                    .foregroundColor(DesignSystem.Colors.primaryText)
-                                    .submitLabel(.search)
-                            }
-                            .padding(.horizontal, 16)
-                            .padding(.vertical, 8)
-                            .background(DesignSystem.Colors.surfaceHighest)
-                            .cornerRadius(12)
-                            .frame(maxWidth: 240)
                         }
                         
-                        // 2-Column Grid
-                        LazyVGrid(columns: [GridItem(.flexible(), spacing: 24), GridItem(.flexible(), spacing: 24)], spacing: 24) {
+                        // Search bar
+                        HStack {
+                            Image(systemName: "magnifyingglass")
+                                .foregroundColor(Color(white: 0.6))
+                            TextField("Search scripts...", text: $viewModel.searchText)
+                                .font(.system(size: 15))
+                                .foregroundColor(.white)
+                                .submitLabel(.search)
+                        }
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 14)
+                        .background(Color(white: 0.1))
+                        .cornerRadius(12)
+                        
+                        // 1-Column Feed
+                        LazyVStack(spacing: 32) {
                             ForEach(viewModel.filteredVideos) { video in
                                 Button(action: { openVideo(video.phAsset) }) {
-                                    VStack(alignment: .leading, spacing: 12) {
-                                        
+                                    VStack(alignment: .leading, spacing: 14) {
                                         // Card Image Container
                                         ZStack {
                                             GeometryReader { geo in
@@ -213,22 +263,18 @@ struct RecordingGalleryView: View {
                                             .aspectRatio(16/9, contentMode: .fill)
                                             .frame(maxWidth: .infinity)
                                             .clipped()
-                                            .cornerRadius(12)
-                                            .overlay(
-                                                RoundedRectangle(cornerRadius: 12)
-                                                    .stroke(Color.white.opacity(0.1), lineWidth: 0.5)
-                                            )
+                                            .cornerRadius(16)
                                             
                                             // Badges
                                             VStack {
                                                 HStack {
                                                     Text("\(video.qualityString) • 60FPS")
                                                         .font(.system(size: 10, weight: .bold))
-                                                        .foregroundColor(DesignSystem.Colors.secondary)
-                                                        .tracking(1.0)
+                                                        .foregroundColor(Color(red: 0.89, green: 0.76, blue: 0.44))
                                                         .padding(.horizontal, 8)
                                                         .padding(.vertical, 4)
-                                                        .glassPanel(cornerRadius: 4)
+                                                        .background(Color.black.opacity(0.6))
+                                                        .cornerRadius(6)
                                                     Spacer()
                                                 }
                                                 Spacer()
@@ -236,48 +282,35 @@ struct RecordingGalleryView: View {
                                                     Spacer()
                                                     Text(video.durationString)
                                                         .font(.system(size: 11, weight: .bold))
-                                                        .foregroundColor(DesignSystem.Colors.primaryText)
+                                                        .foregroundColor(.white)
                                                         .padding(.horizontal, 8)
                                                         .padding(.vertical, 4)
                                                         .background(Color.black.opacity(0.8))
-                                                        .cornerRadius(8)
+                                                        .cornerRadius(6)
                                                 }
                                             }
                                             .padding(12)
-                                            
-                                            // Play Overlay
-                                            Circle()
-                                                .fill(DesignSystem.Colors.accentContainer.opacity(0.2))
-                                                .frame(width: 48, height: 48)
-                                                .background(.ultraThinMaterial)
-                                                .clipShape(Circle())
-                                                .overlay(
-                                                    Circle().stroke(DesignSystem.Colors.accentContainer.opacity(0.4), lineWidth: 1)
-                                                )
-                                                .overlay(
-                                                    Image(systemName: "play.fill")
-                                                        .foregroundColor(DesignSystem.Colors.accent)
-                                                )
                                         }
-                                        .shadow(color: Color.black.opacity(0.3), radius: 10, x: 0, y: 5)
+                                        .shadow(color: Color.black.opacity(0.15), radius: 10, x: 0, y: 5)
                                         
                                         // Metadata below card
                                         HStack(alignment: .top) {
                                             VStack(alignment: .leading, spacing: 4) {
                                                 Text(video.title)
-                                                    .font(DesignSystem.Typography.headline)
-                                                    .foregroundColor(DesignSystem.Colors.primaryText)
+                                                    .font(.system(size: 18, weight: .bold))
+                                                    .foregroundColor(.white)
                                                     .lineLimit(1)
                                                 
-                                                Text(video.creationDateString)
-                                                    .font(DesignSystem.Typography.label)
-                                                    .foregroundColor(DesignSystem.Colors.secondaryText)
+                                                Text(video.creationDateString.replacingOccurrences(of: " • ", with: " • "))
+                                                    .font(.system(size: 13))
+                                                    .foregroundColor(Color(white: 0.6))
                                             }
                                             Spacer()
                                             Button(action: {}) {
                                                 Image(systemName: "ellipsis")
                                                     .rotationEffect(.degrees(90))
-                                                    .foregroundColor(DesignSystem.Colors.secondaryText)
+                                                    .font(.system(size: 18, weight: .medium))
+                                                    .foregroundColor(Color(white: 0.6))
                                             }
                                         }
                                         .padding(.horizontal, 4)
@@ -293,6 +326,8 @@ struct RecordingGalleryView: View {
             }
             .navigationBarHidden(true)
             .onAppear {
+                let fmt = DateFormatter(); fmt.dateFormat = "HH:mm:ss.SSS"
+                print("⏱️ [\(fmt.string(from: Date()))] [GALLERY] onAppear fired")
                 viewModel.requestPermissionAndLoad()
             }
             .fullScreenCover(isPresented: $viewModel.isPlayingVideo) {

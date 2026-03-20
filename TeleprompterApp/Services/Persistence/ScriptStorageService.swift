@@ -1,6 +1,7 @@
 import Foundation
 import PDFKit
 import UniformTypeIdentifiers
+import CoreData
 
 /// Service for persisting and retrieving scripts
 @MainActor
@@ -34,25 +35,26 @@ class ScriptStorageService: ObservableObject {
         isLoading = true
         defer { isLoading = false }
         
-        do {
-            let files = try fileManager.contentsOfDirectory(at: scriptsDirectory, includingPropertiesForKeys: nil)
+        let loadedScripts = await Task.detached(priority: .userInitiated) { () -> [Script] in
+            let fm = FileManager.default
+            let decoder = JSONDecoder()
+            guard let docs = fm.urls(for: .documentDirectory, in: .userDomainMask).first else { return [] }
+            let dir = docs.appendingPathComponent("Scripts", isDirectory: true)
+            
+            guard let files = try? fm.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil) else { return [] }
             let jsonFiles = files.filter { $0.pathExtension == "json" }
             
-            var loadedScripts: [Script] = []
-            
+            var results: [Script] = []
             for file in jsonFiles {
                 if let data = try? Data(contentsOf: file),
                    let script = try? decoder.decode(Script.self, from: data) {
-                    loadedScripts.append(script)
+                    results.append(script)
                 }
             }
-            
-            // Sort by updated date, newest first
-            scripts = loadedScripts.sorted { $0.updatedAt > $1.updatedAt }
-        } catch {
-            print("Error loading scripts: \(error)")
-            scripts = []
-        }
+            return results.sorted { $0.updatedAt > $1.updatedAt }
+        }.value
+        
+        self.scripts = loadedScripts
     }
     
     /// Save a script to disk
@@ -60,39 +62,49 @@ class ScriptStorageService: ObservableObject {
         var updatedScript = script
         updatedScript.updatedAt = Date()
         
-        let data = try encoder.encode(updatedScript)
-        let fileURL = scriptsDirectory.appendingPathComponent("\(script.id.uuidString).json")
-        try data.write(to: fileURL)
-        
-        // Update local cache
+        // Update local UI cache immediately for flawless responsiveness
         if let index = scripts.firstIndex(where: { $0.id == script.id }) {
             scripts[index] = updatedScript
         } else {
             scripts.insert(updatedScript, at: 0)
         }
-        
-        // Re-sort
         scripts.sort { $0.updatedAt > $1.updatedAt }
+        
+        // Fire physical disk writes into isolated detached utility thread
+        let dir = scriptsDirectory
+        try await Task.detached(priority: .utility) {
+            let encoder = JSONEncoder()
+            let data = try encoder.encode(updatedScript)
+            let fileURL = dir.appendingPathComponent("\(updatedScript.id.uuidString).json")
+            try data.write(to: fileURL)
+        }.value
     }
     
     /// Delete a script from disk
     func delete(_ script: Script) async throws {
-        let fileURL = scriptsDirectory.appendingPathComponent("\(script.id.uuidString).json")
-        try fileManager.removeItem(at: fileURL)
-        
-        // Update local cache
+        // Update local UI cache immediately
         scripts.removeAll { $0.id == script.id }
+        
+        let dir = scriptsDirectory
+        try await Task.detached(priority: .utility) {
+            let fileURL = dir.appendingPathComponent("\(script.id.uuidString).json")
+            try? FileManager.default.removeItem(at: fileURL)
+        }.value
     }
     
     /// Delete multiple scripts
     func delete(atOffsets offsets: IndexSet) async throws {
-        for index in offsets {
-            let script = scripts[index]
-            let fileURL = scriptsDirectory.appendingPathComponent("\(script.id.uuidString).json")
-            try fileManager.removeItem(at: fileURL)
-        }
-        
+        let scriptsToDelete = offsets.map { scripts[$0] }
         scripts.remove(atOffsets: offsets)
+        
+        let dir = scriptsDirectory
+        try await Task.detached(priority: .utility) {
+            let fileManager = FileManager.default
+            for script in scriptsToDelete {
+                let fileURL = dir.appendingPathComponent("\(script.id.uuidString).json")
+                try? fileManager.removeItem(at: fileURL)
+            }
+        }.value
     }
     
     /// Create a new empty script
@@ -228,5 +240,93 @@ class DocumentImportService {
         }
         
         throw DocumentImportError.unsupportedFormat
+    }
+}
+
+// MARK: - Video Metadata Cache (Core Data)
+
+@objc(VideoMetadata)
+public class VideoMetadata: NSManagedObject {
+    @NSManaged public var localIdentifier: String
+    @NSManaged public var title: String?
+}
+
+class VideoMetadataCache {
+    static let shared = VideoMetadataCache()
+    
+    let container: NSPersistentContainer
+    
+    init() {
+        let model = NSManagedObjectModel()
+        
+        let entity = NSEntityDescription()
+        entity.name = "VideoMetadata"
+        entity.managedObjectClassName = "VideoMetadata"
+        
+        let idAttr = NSAttributeDescription()
+        idAttr.name = "localIdentifier"
+        idAttr.attributeType = .stringAttributeType
+        idAttr.isOptional = false
+        
+        let titleAttr = NSAttributeDescription()
+        titleAttr.name = "title"
+        titleAttr.attributeType = .stringAttributeType
+        titleAttr.isOptional = true
+        
+        entity.properties = [idAttr, titleAttr]
+        
+        let indexElement = NSFetchIndexElementDescription(property: idAttr, collationType: .binary)
+        let indexDesc = NSFetchIndexDescription(name: "idIndex", elements: [indexElement])
+        entity.indexes = [indexDesc]
+        
+        model.entities = [entity]
+        
+        container = NSPersistentContainer(name: "TeleprompterVideoCache", managedObjectModel: model)
+        container.loadPersistentStores { _, error in
+            if let error = error { print("Failed to load Core Data Cache: \(error)") }
+        }
+    }
+    
+    func getTitle(for localIdentifier: String) -> String? {
+        let context = container.newBackgroundContext()
+        var title: String? = nil
+        context.performAndWait {
+            let request = NSFetchRequest<VideoMetadata>(entityName: "VideoMetadata")
+            request.predicate = NSPredicate(format: "localIdentifier == %@", localIdentifier)
+            request.fetchLimit = 1
+            title = try? context.fetch(request).first?.title
+        }
+        return title
+    }
+    
+    func getAllMetadata() -> [(localIdentifier: String, title: String?)] {
+        let context = container.newBackgroundContext()
+        var resultsArray: [(localIdentifier: String, title: String?)] = []
+        context.performAndWait {
+            let request = NSFetchRequest<VideoMetadata>(entityName: "VideoMetadata")
+            if let results = try? context.fetch(request) {
+                resultsArray = results.map { ($0.localIdentifier, $0.title) }
+            }
+        }
+        return resultsArray
+    }
+    
+    func saveTitle(_ title: String, for localIdentifier: String) {
+        let context = container.newBackgroundContext()
+        context.perform {
+            let request = NSFetchRequest<VideoMetadata>(entityName: "VideoMetadata")
+            request.predicate = NSPredicate(format: "localIdentifier == %@", localIdentifier)
+            request.fetchLimit = 1
+            let existing = try? context.fetch(request).first
+            
+            if let metadata = existing {
+                metadata.title = title
+            } else {
+                let metadata = VideoMetadata(context: context)
+                metadata.localIdentifier = localIdentifier
+                metadata.title = title
+            }
+            try? context.save()
+        }
     }
 }
