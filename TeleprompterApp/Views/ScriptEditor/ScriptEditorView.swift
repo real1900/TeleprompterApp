@@ -116,6 +116,7 @@ struct ScriptEditorView: View {
                                 .frame(minHeight: 400)
                                 .focused($isContentFocused)
                                 .lineSpacing(appState.settings.lineSpacing)
+                                .scaleEffect(x: appState.settings.mirrorText ? -1 : 1, y: 1)
                         }
                         .padding(.horizontal, DesignSystem.Layout.paddingLarge)
                         .padding(.bottom, 120) // padding for toolbar
@@ -147,58 +148,109 @@ struct ScriptEditorView: View {
     // MARK: - Toolbar View
     
     private var formattingToolbar: some View {
-        HStack(spacing: 16) {
-            // Font Size
-            HStack(spacing: 8) {
-                Image(systemName: "textformat.size")
-                    .foregroundColor(DesignSystem.Colors.secondary)
-                
-                HStack(spacing: 4) {
-                    Button {
-                        if appState.settings.fontSize >= TeleprompterSettings.fontSizeRange.lowerBound + 2 {
-                            appState.settings.fontSize -= 2
-                        }
-                    } label: {
-                        Image(systemName: "minus")
-                            .frame(width: 30, height: 30)
-                            .background(DesignSystem.Colors.background)
-                            .cornerRadius(6)
-                    }
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 24) {
+                // Font Size
+                HStack(spacing: 8) {
+                    Image(systemName: "textformat.size")
+                        .foregroundColor(DesignSystem.Colors.secondary)
                     
-                    Text("\(Int(appState.settings.fontSize))px")
-                        .font(DesignSystem.Typography.label.weight(.bold))
-                        .frame(width: 44)
-                        .multilineTextAlignment(.center)
-                    
-                    Button {
-                        if appState.settings.fontSize <= TeleprompterSettings.fontSizeRange.upperBound - 2 {
-                            appState.settings.fontSize += 2
+                    HStack(spacing: 4) {
+                        Button {
+                            if appState.settings.fontSize >= TeleprompterSettings.fontSizeRange.lowerBound + 2 {
+                                appState.settings.fontSize -= 2
+                            }
+                        } label: {
+                            Image(systemName: "minus")
+                                .frame(width: 30, height: 30)
+                                .background(DesignSystem.Colors.background)
+                                .cornerRadius(6)
+                                .foregroundColor(DesignSystem.Colors.primaryText)
                         }
-                    } label: {
-                        Image(systemName: "plus")
-                            .frame(width: 30, height: 30)
-                            .background(DesignSystem.Colors.background)
-                            .cornerRadius(6)
+                        
+                        Text("\(Int(appState.settings.fontSize))px")
+                            .font(DesignSystem.Typography.label.weight(.bold))
+                            .frame(width: 44)
+                            .multilineTextAlignment(.center)
+                            .foregroundColor(DesignSystem.Colors.primaryText)
+                        
+                        Button {
+                            if appState.settings.fontSize <= TeleprompterSettings.fontSizeRange.upperBound - 2 {
+                                appState.settings.fontSize += 2
+                            }
+                        } label: {
+                            Image(systemName: "plus")
+                                .frame(width: 30, height: 30)
+                                .background(DesignSystem.Colors.background)
+                                .cornerRadius(6)
+                                .foregroundColor(DesignSystem.Colors.primaryText)
+                        }
                     }
                 }
-            }
-            
-            Spacer()
-            
-            // Mirror Toggle
-            HStack(spacing: 8) {
-                Text("MIRROR")
-                    .font(DesignSystem.Typography.label)
-                    .foregroundColor(DesignSystem.Colors.secondaryText)
-                    .tracking(1.0)
                 
-                Toggle("", isOn: $appState.settings.mirrorText)
-                    .labelsHidden()
-                    .tint(DesignSystem.Colors.accent)
-                    .scaleEffect(0.8)
+                // Line Spacing
+                HStack(spacing: 8) {
+                    Image(systemName: "text.alignleft")
+                        .foregroundColor(DesignSystem.Colors.secondary)
+                    
+                    HStack(spacing: 4) {
+                        ForEach([1.0, 1.5, 2.0], id: \.self) { spacing in
+                            Button {
+                                appState.settings.lineSpacing = spacing * 8 // convert multiplier to points roughly
+                            } label: {
+                                Text(String(format: "%.1f", spacing))
+                                    .font(DesignSystem.Typography.label.weight(.bold))
+                                    .padding(.horizontal, 10)
+                                    .padding(.vertical, 6)
+                                    .background(abs(appState.settings.lineSpacing - (spacing * 8)) < 1 ? DesignSystem.Colors.accent : DesignSystem.Colors.background)
+                                    .foregroundColor(abs(appState.settings.lineSpacing - (spacing * 8)) < 1 ? .white : DesignSystem.Colors.primaryText)
+                                    .cornerRadius(6)
+                            }
+                        }
+                    }
+                }
+                
+                // Speed Control
+                HStack(spacing: 8) {
+                    Image(systemName: "speedometer")
+                        .foregroundColor(DesignSystem.Colors.secondary)
+                    
+                    HStack(spacing: 4) {
+                        Button {
+                            // Cycle speed
+                            let current = appState.settings.scrollSpeed
+                            if current < 150 {
+                                appState.settings.scrollSpeed += 10
+                            } else {
+                                appState.settings.scrollSpeed = 20
+                            }
+                        } label: {
+                            Text("x\(String(format: "%.1f", appState.settings.scrollSpeed / 45.0))") // base 45 WPM is 1x for this mockup
+                                .font(DesignSystem.Typography.label.weight(.bold))
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 6)
+                                .background(DesignSystem.Colors.background)
+                                .foregroundColor(DesignSystem.Colors.primaryText)
+                                .cornerRadius(6)
+                        }
+                    }
+                }
+                
+                // Mirror Toggle
+                HStack(spacing: 8) {
+                    Text("MIRROR")
+                        .font(DesignSystem.Typography.label)
+                        .foregroundColor(DesignSystem.Colors.secondaryText)
+                        .tracking(1.0)
+                    
+                    Toggle("", isOn: $appState.settings.mirrorText)
+                        .labelsHidden()
+                        .tint(DesignSystem.Colors.accent)
+                        .scaleEffect(0.8)
+                }
             }
+            .padding(16)
         }
-        .padding(16)
         .glassPanel(cornerRadius: DesignSystem.Layout.cornerRadiusLarge)
         .shadow(color: Color.black.opacity(0.3), radius: 20, x: 0, y: 10)
     }

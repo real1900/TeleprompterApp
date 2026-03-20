@@ -21,7 +21,7 @@ public enum DesignSystem {
         public static let secondaryContainer = Color(hexString: "#af8d11")
         public static let destructive = Color(hexString: "#ffb4ab")      // error
         
-        public static let glassmorphismBackground = Color(red: 42/255, green: 42/255, blue: 42/255, opacity: 0.8)
+        public static let glassmorphismBackground = Color(red: 42/255, green: 42/255, blue: 42/255, opacity: 0.6)
     }
     
     // MARK: - Typography

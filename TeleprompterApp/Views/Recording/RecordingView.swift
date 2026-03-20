@@ -139,22 +139,20 @@ struct RecordingView: View {
                         .transition(.move(edge: .top).combined(with: .opacity))
                     }
                     
-                    // Camera Controls Overlay
-                    if showCameraControls && !cameraService.isRecording {
-                        VStack {
-                            Spacer()
+                    VStack(spacing: 8) {
+                        Spacer()
+                        
+                        // Camera Controls Overlay (pops up above RecordingControlsView)
+                        if showCameraControls && !cameraService.isRecording {
                             CameraControlsOverlay(cameraService: cameraService)
                                 .padding(.horizontal, 20)
-                                .padding(.bottom, 120) // Keep relative padding above bottom bar
+                                .padding(.bottom, 8)
                                 .frame(maxWidth: safeGeo.size.width)
+                                .transition(.move(edge: .bottom).combined(with: .opacity))
                         }
-                        .transition(.move(edge: .bottom).combined(with: .opacity))
-                        .zIndex(2)
-                    }
-                    
-                    // Recording Controls (bottom)
-                    VStack {
-                        Spacer()
+                        
+                        // Main Recording Controls Bar
+                        // Automatically rests on the bottom safeArea managed by ContentView
                         RecordingControlsView(
                             cameraService: cameraService,
                             teleprompterEngine: teleprompterEngine,
@@ -211,6 +209,9 @@ struct RecordingView: View {
                 cameraService.startSession()
             }
         }
+        .onChange(of: appState.settings) { _, _ in
+            syncCameraSettings()
+        }
     }
     
     // MARK: - Methods
@@ -244,10 +245,19 @@ struct RecordingView: View {
         
         do {
             try await cameraService.configureSession()
+            syncCameraSettings()
             cameraService.startSession()
         } catch {
             print("Camera setup failed: \(error)")
         }
+    }
+    
+    private func syncCameraSettings() {
+        cameraService.applyVideoSettings(
+            quality: appState.settings.videoQuality,
+            frameRate: appState.settings.frameRate,
+            stabilization: appState.settings.stabilizationEnabled
+        )
     }
     
     private func handleTapToFocus(at location: CGPoint, in size: CGSize) {
@@ -264,8 +274,14 @@ struct RecordingView: View {
         }
     }
     
+    // Track recording interaction state to avoid double-firing bugs
+    @State private var isStartingRecording = false
+    @State private var countdownTimer: Timer?
+    
     private func handleRecordTapped() {
+        guard !isStartingRecording && !cameraService.isRecording else { return }
         showCameraControls = false // dismiss controls if open
+        
         if appState.settings.showCountdown {
             startCountdown()
         } else {
@@ -276,8 +292,10 @@ struct RecordingView: View {
     private func startCountdown() {
         countdownValue = appState.settings.countdownDuration
         showCountdown = true
+        isStartingRecording = true
         
-        Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [self] timer in
+        countdownTimer?.invalidate()
+        countdownTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [self] timer in
             Task { @MainActor in
                 countdownValue -= 1
                 if countdownValue <= 0 {
@@ -290,13 +308,16 @@ struct RecordingView: View {
     }
     
     private func startRecording() {
+        isStartingRecording = true
         if !cameraService.isSessionRunning {
             cameraService.startSession()
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
                 self.beginRecording()
+                self.isStartingRecording = false
             }
         } else {
             beginRecording()
+            isStartingRecording = false
         }
     }
     
@@ -319,7 +340,10 @@ struct RecordingView: View {
                 let videoURL = try await cameraService.stopRecording()
                 teleprompterEngine.stopScrolling()
                 teleprompterEngine.resetToTop()
-                try await cameraService.exportToPhotos(videoURL: videoURL)
+                
+                let title = appState.currentScript?.title
+                try await cameraService.exportToPhotos(videoURL: videoURL, scriptTitle: title)
+                
                 try? FileManager.default.removeItem(at: videoURL)
             } catch {
                 print("Stop recording failed: \(error)")

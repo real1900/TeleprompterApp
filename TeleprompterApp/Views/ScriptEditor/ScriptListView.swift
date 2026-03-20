@@ -1,6 +1,5 @@
 import SwiftUI
-
-/// Collection of saved scripts with search, create, edit, and delete functionality
+import UniformTypeIdentifiers/// Collection of saved scripts with search, create, edit, and delete functionality
 /// Updated to match the high-fidelity native Stitch GoPrompt UI.
 struct ScriptListView: View {
     @StateObject private var storage = ScriptStorageService()
@@ -9,6 +8,9 @@ struct ScriptListView: View {
     @State private var editingScript: Script?
     @State private var isCreatingNew = false
     @State private var searchText = ""
+    @State private var isImporting = false
+    @State private var importError: String? = nil
+    @State private var showErrorAlert = false
     
     // Filtered scripts based on search
     private var filteredScripts: [Script] {
@@ -124,12 +126,18 @@ struct ScriptListView: View {
                                             }
                                             
                                             // Import Card Button at the end
-                                            ImportScriptCardView()
+                                            Button(action: { isImporting = true }) {
+                                                ImportScriptCardView()
+                                            }
+                                            .buttonStyle(.plain)
                                         }
                                     } else if filteredScripts.count == 1 {
                                         // Still show import button if there's only the featured card
-                                        ImportScriptCardView()
-                                            .frame(height: 180)
+                                        Button(action: { isImporting = true }) {
+                                            ImportScriptCardView()
+                                                .frame(height: 180)
+                                        }
+                                        .buttonStyle(.plain)
                                     }
                                 }
                                 .padding(.horizontal, DesignSystem.Layout.paddingLarge)
@@ -161,6 +169,24 @@ struct ScriptListView: View {
                         editingScript = nil
                     }
                 )
+            }
+            .fileImporter(
+                isPresented: $isImporting,
+                allowedContentTypes: [
+                    .pdf, 
+                    .plainText, 
+                    .rtf,
+                    UTType("org.openxmlformats.wordprocessingml.document") ?? .data,
+                    UTType("com.microsoft.word.doc") ?? .data
+                ],
+                allowsMultipleSelection: false
+            ) { result in
+                handleImportResult(result)
+            }
+            .alert("Import Error", isPresented: $showErrorAlert, presenting: importError) { _ in
+                Button("OK", role: .cancel) { }
+            } message: { error in
+                Text(error)
             }
             .task {
                 await storage.loadScripts()
@@ -201,6 +227,41 @@ struct ScriptListView: View {
     private func deleteScript(_ script: Script) {
         Task {
             try? await storage.delete(script)
+        }
+    }
+    
+    private func handleImportResult(_ result: Result<[URL], Error>) {
+        switch result {
+        case .success(let urls):
+            guard let url = urls.first else { return }
+            
+            Task {
+                do {
+                    let imported = try await DocumentImportService.extractText(from: url)
+                    
+                    // Create new script
+                    let newScript = Script(
+                        title: imported.defaultTitle,
+                        content: imported.content,
+                        createdAt: Date(),
+                        updatedAt: Date()
+                    )
+                    
+                    // Set as editing and isCreatingNew
+                    await MainActor.run {
+                        self.isCreatingNew = true
+                        self.editingScript = newScript
+                    }
+                } catch {
+                    await MainActor.run {
+                        self.importError = error.localizedDescription
+                        self.showErrorAlert = true
+                    }
+                }
+            }
+        case .failure(let error):
+            importError = error.localizedDescription
+            showErrorAlert = true
         }
     }
 }

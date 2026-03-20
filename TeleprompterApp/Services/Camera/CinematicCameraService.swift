@@ -492,12 +492,16 @@ class CinematicCameraService: NSObject, ObservableObject {
     
     private func applyExposureCompensation() {
         guard let device = videoDeviceInput?.device else { return }
-        let currentExposureCompensation = exposureCompensation
+        
+        // Clamp to physical device limits (-3 to 3 is typical, but varies by hardware)
+        var targetBias = exposureCompensation
+        targetBias = max(targetBias, device.minExposureTargetBias)
+        targetBias = min(targetBias, device.maxExposureTargetBias)
         
         sessionQueue.async {
             do {
                 try device.lockForConfiguration()
-                device.setExposureTargetBias(currentExposureCompensation)
+                device.setExposureTargetBias(targetBias)
                 device.unlockForConfiguration()
             } catch {
                 print("Exposure compensation error: \(error)")
@@ -588,48 +592,119 @@ class CinematicCameraService: NSObject, ObservableObject {
         return g
     }
     
-    // MARK: - Video Quality
+    // MARK: - Video Quality & Hardware Sync
     
     private func applyVideoQuality() {
-        let session = captureSession
+        // Obsolete stub, use applyVideoSettings instead on mass updates
         let preset = videoQuality.sessionPreset
+        sessionQueue.async { [weak self] in
+            self?.captureSession.beginConfiguration()
+            if self?.captureSession.canSetSessionPreset(preset) == true {
+                self?.captureSession.sessionPreset = preset
+            }
+            self?.captureSession.commitConfiguration()
+        }
+    }
+    
+    /// Synchronize Quality, Frame Rate, and Stabilization to Physical Hardware
+    func applyVideoSettings(quality: VideoQuality, frameRate: Int, stabilization: Bool) {
+        let session = captureSession
+        let preset = quality.sessionPreset
         
-        sessionQueue.async {
+        sessionQueue.async { [weak self] in
+            guard let self = self else { return }
+            
+            // 1. Set Quality
             session.beginConfiguration()
             if session.canSetSessionPreset(preset) {
                 session.sessionPreset = preset
+                print("🎥 hardware sync: Quality set to \(preset.rawValue)")
             }
             session.commitConfiguration()
+            
+            // 2. Set Frame Rate
+            if let device = self.videoDeviceInput?.device {
+                do {
+                    try device.lockForConfiguration()
+                    let targetFrameRate = Float64(frameRate)
+                    var supportsFrameRate = false
+                    
+                    for range in device.activeFormat.videoSupportedFrameRateRanges {
+                        if range.minFrameRate <= targetFrameRate && targetFrameRate <= range.maxFrameRate {
+                            supportsFrameRate = true
+                            break
+                        }
+                    }
+                    
+                    if supportsFrameRate {
+                        device.activeVideoMinFrameDuration = CMTimeMake(value: 1, timescale: Int32(frameRate))
+                        device.activeVideoMaxFrameDuration = CMTimeMake(value: 1, timescale: Int32(frameRate))
+                        print("🎥 hardware sync: Frame rate set to \(frameRate) fps")
+                    } else {
+                        print("⚠️ hardware sync: Frame rate \(frameRate) fps unsupported by preset \(preset.rawValue)")
+                    }
+                    device.unlockForConfiguration()
+                } catch {
+                    print("❌ hardware sync: Failed locking device for framerate - \(error)")
+                }
+            }
+            
+            // 3. Set Stabilization
+            let stabMode: AVCaptureVideoStabilizationMode = stabilization ? .auto : .off
+            if let connection = self.movieFileOutput.connection(with: .video), connection.isVideoStabilizationSupported {
+                connection.preferredVideoStabilizationMode = stabMode
+            }
+            if let connection = self.videoDataOutput?.connection(with: .video), connection.isVideoStabilizationSupported {
+                connection.preferredVideoStabilizationMode = stabMode
+            }
+            print("🎥 hardware sync: Stabilization set to \(stabilization ? "auto" : "off")")
         }
     }
     
     // MARK: - Orientation Control
     
     func updateVideoOrientation(_ orientation: UIDeviceOrientation) {
-        let output = videoDataOutput
+        let videoOutput = videoDataOutput
+        let movieOutput = movieFileOutput
         sessionQueue.async { [self] in
-            guard let connection = output?.connection(with: .video) else { return }
-            self.updateConnectionOrientation(connection, to: orientation)
+            if let dataConnection = videoOutput?.connection(with: .video) {
+                self.updateConnectionOrientation(dataConnection, to: orientation)
+            }
+            if let movieConnection = movieOutput.connection(with: .video) {
+                self.updateConnectionOrientation(movieConnection, to: orientation)
+            }
         }
     }
     
     nonisolated private func updateConnectionOrientation(_ connection: AVCaptureConnection, to orientation: UIDeviceOrientation) {
-        let angle: CGFloat
+        let videoOrientation: AVCaptureVideoOrientation
         switch orientation {
         case .portrait:
-            angle = 90
+            videoOrientation = .portrait
         case .landscapeLeft:
-            angle = 180 // Inverted for front camera
+            videoOrientation = .landscapeRight
         case .landscapeRight:
-            angle = 0 // Inverted for front camera
+            videoOrientation = .landscapeLeft
         case .portraitUpsideDown:
-            angle = 270
+            videoOrientation = .portraitUpsideDown
         default:
-            return
+            // Fallback to UIWindowScene orientation for .unknown or .faceUp
+            var fallback: AVCaptureVideoOrientation = .portrait
+            DispatchQueue.main.sync {
+                if let windowScene = UIApplication.shared.connectedScenes.first(where: { $0.activationState == .foregroundActive }) as? UIWindowScene {
+                    switch windowScene.interfaceOrientation {
+                    case .landscapeRight: fallback = .landscapeRight
+                    case .landscapeLeft: fallback = .landscapeLeft
+                    case .portraitUpsideDown: fallback = .portraitUpsideDown
+                    default: fallback = .portrait
+                    }
+                }
+            }
+            videoOrientation = fallback
         }
         
-        if connection.isVideoRotationAngleSupported(angle) {
-            connection.videoRotationAngle = angle
+        if connection.isVideoOrientationSupported {
+            connection.videoOrientation = videoOrientation
         }
     }
 
@@ -903,38 +978,89 @@ class CinematicCameraService: NSObject, ObservableObject {
         }
     }
     
-    func exportToPhotos(videoURL: URL) async throws {
-        print("📹 Export: Starting export of \(videoURL.lastPathComponent)")
+    private let albumName = "GoPrompt"
+    
+    private func fetchOrCreateAlbum() async throws -> PHAssetCollection {
+        let fetchOptions = PHFetchOptions()
+        fetchOptions.predicate = NSPredicate(format: "title = %@", albumName)
+        let collection = PHAssetCollection.fetchAssetCollections(with: .album, subtype: .any, options: fetchOptions)
         
-        // Verify file exists
-        guard FileManager.default.fileExists(atPath: videoURL.path) else {
-            print("❌ Export: File does not exist at \(videoURL.path)")
-            throw CameraError.exportFailed(NSError(domain: "CinematicCamera", code: -9, userInfo: [NSLocalizedDescriptionKey: "Video file not found"]))
+        if let existingAlbum = collection.firstObject {
+            return existingAlbum
         }
         
-        // Check file size
-        if let attrs = try? FileManager.default.attributesOfItem(atPath: videoURL.path),
-           let fileSize = attrs[.size] as? Int64 {
-            print("📹 Export: File size = \(fileSize / 1024) KB")
-            if fileSize == 0 {
-                print("❌ Export: File is empty!")
-                throw CameraError.exportFailed(NSError(domain: "CinematicCamera", code: -10, userInfo: [NSLocalizedDescriptionKey: "Video file is empty"]))
+        var albumPlaceholder: PHObjectPlaceholder?
+        try await PHPhotoLibrary.shared().performChanges {
+            let createAlbumRequest = PHAssetCollectionChangeRequest.creationRequestForAssetCollection(withTitle: self.albumName)
+            albumPlaceholder = createAlbumRequest.placeholderForCreatedAssetCollection
+        }
+        
+        guard let placeholder = albumPlaceholder else {
+            throw CameraError.exportFailed(NSError(domain: "CinematicCamera", code: -11, userInfo: [NSLocalizedDescriptionKey: "Failed to create album"]))
+        }
+        
+        let newCollection = PHAssetCollection.fetchAssetCollections(withLocalIdentifiers: [placeholder.localIdentifier], options: nil)
+        guard let album = newCollection.firstObject else {
+            throw CameraError.exportFailed(NSError(domain: "CinematicCamera", code: -12, userInfo: [NSLocalizedDescriptionKey: "Failed to fetch created album"]))
+        }
+        
+        return album
+    }
+    
+    func exportToPhotos(videoURL: URL, scriptTitle: String? = nil) async throws {
+        print("📹 Export: Starting export of \(videoURL.lastPathComponent)")
+        
+        // Rename the internal file to the script title for metadata accuracy in Photos
+        var fileToExport = videoURL
+        if let title = scriptTitle, !title.isEmpty {
+            let sanitizedTitle = title.replacingOccurrences(of: "/", with: "-")
+                                      .replacingOccurrences(of: "\\", with: "-")
+            let newURL = videoURL.deletingLastPathComponent()
+                                 .appendingPathComponent("\(sanitizedTitle).mov")
+            
+            do {
+                if FileManager.default.fileExists(atPath: newURL.path) {
+                    try FileManager.default.removeItem(at: newURL)
+                }
+                try FileManager.default.moveItem(at: videoURL, to: newURL)
+                fileToExport = newURL
+                print("📹 Export: Renamed video to \(newURL.lastPathComponent)")
+            } catch {
+                print("⚠️ Export: Failed to rename video, using original name. Error: \(error.localizedDescription)")
             }
         }
         
-        let status = await PHPhotoLibrary.requestAuthorization(for: .addOnly)
-        print("📹 Export: Photo library auth status = \(status.rawValue)")
+        // Verify file exists
+        guard FileManager.default.fileExists(atPath: fileToExport.path) else {
+            print("❌ Export: File does not exist at \(fileToExport.path)")
+            throw CameraError.exportFailed(NSError(domain: "CinematicCamera", code: -9, userInfo: [NSLocalizedDescriptionKey: "Video file not found"]))
+        }
         
+        let status = await PHPhotoLibrary.requestAuthorization(for: .readWrite)
         guard status == .authorized || status == .limited else {
             print("❌ Export: Photo library access denied")
             throw CameraError.exportFailed(NSError(domain: "CinematicCamera", code: -6))
         }
         
         do {
+            let album = try await fetchOrCreateAlbum()
+            var localIdentifier: String?
+            
             try await PHPhotoLibrary.shared().performChanges {
-                PHAssetChangeRequest.creationRequestForAssetFromVideo(atFileURL: videoURL)
+                let assetChangeRequest = PHAssetChangeRequest.creationRequestForAssetFromVideo(atFileURL: fileToExport)
+                guard let assetPlaceholder = assetChangeRequest?.placeholderForCreatedAsset else { return }
+                guard let albumChangeRequest = PHAssetCollectionChangeRequest(for: album) else { return }
+                albumChangeRequest.addAssets([assetPlaceholder] as NSArray)
+                
+                localIdentifier = assetPlaceholder.localIdentifier
             }
-            print("✅ Export: Video saved to Photos successfully!")
+            
+            if let title = scriptTitle, let id = localIdentifier {
+                UserDefaults.standard.set(title, forKey: "video_title_\(id)")
+                print("✅ Export: Saved metadata title '\(title)' for asset \(id)")
+            }
+            
+            print("✅ Export: Video saved to GoPrompt album successfully!")
         } catch {
             print("❌ Export: Failed to save - \(error.localizedDescription)")
             throw CameraError.exportFailed(error)

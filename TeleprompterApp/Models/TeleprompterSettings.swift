@@ -30,6 +30,17 @@ struct TeleprompterSettings: Codable, Equatable {
     /// Countdown duration in seconds
     var countdownDuration: Int
     
+    // MARK: - Camera Settings
+    
+    /// Video capture resolution (e.g. 1080p, 4K)
+    var videoQuality: VideoQuality
+    
+    /// Video frame rate (e.g. 24, 30, 60)
+    var frameRate: Int
+    
+    /// Enable video stabilization
+    var stabilizationEnabled: Bool
+    
     // MARK: - Computed Properties
     
     var textColor: Color {
@@ -51,7 +62,10 @@ struct TeleprompterSettings: Codable, Equatable {
         horizontalPadding: 20,
         mirrorText: false,
         showCountdown: true,
-        countdownDuration: 3
+        countdownDuration: 3,
+        videoQuality: .medium,
+        frameRate: 30,
+        stabilizationEnabled: true
     )
     
     // MARK: - Ranges

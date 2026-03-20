@@ -21,25 +21,15 @@ struct CameraControlsOverlay: View {
             }
             
             // Slider Track
-            ZStack(alignment: .leading) {
+            ZStack(alignment: .center) {
                 RoundedRectangle(cornerRadius: 16)
-                    .fill(DesignSystem.Colors.surfaceHighest.opacity(0.5))
+                    .fill(DesignSystem.Colors.surfaceHighest.opacity(0.3))
                     .frame(height: 48)
                 
-                // Values
-                HStack {
-                    ForEach(-3...3, id: \.self) { val in
-                        Text(val > 0 ? "+\(val)" : "\(val)")
-                            .font(.system(size: 10, weight: val == Int(cameraService.exposureCompensation) ? .bold : .regular, design: .monospaced))
-                            .foregroundColor(val == Int(cameraService.exposureCompensation) ? DesignSystem.Colors.secondary : DesignSystem.Colors.secondaryText)
-                            .frame(maxWidth: .infinity)
-                    }
-                }
-                .padding(.horizontal, 16)
-                
-                // Invisible real slider over top
-                Slider(value: $cameraService.exposureCompensation, in: -3...3)
-                    .opacity(0.05)
+                // Real visible slider over top
+                Slider(value: $cameraService.exposureCompensation, in: -3...3, step: 0.1)
+                    .tint(DesignSystem.Colors.secondary)
+                    .padding(.horizontal, 16)
                     .frame(height: 48)
             }
         }

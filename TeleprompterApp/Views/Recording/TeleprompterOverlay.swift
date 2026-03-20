@@ -54,6 +54,7 @@ struct TeleprompterOverlay: View {
                                 .shadow(color: .black.opacity(0.4), radius: 10, x: 0, y: 4)
                                 .multilineTextAlignment(isLandscape ? .leading : .center)
                                 .lineSpacing(settings.fontSize * 0.35)
+                                .scaleEffect(x: settings.mirrorText ? -1 : 1, y: 1)
                                 .fixedSize(horizontal: false, vertical: true)
                                 .frame(maxWidth: .infinity, alignment: isLandscape ? .leading : .center)
                                 .padding(.horizontal, isLandscape ? 16 : 20)

@@ -91,22 +91,16 @@ struct SettingsView: View {
                                 SettingsRow(
                                     icon: "4k.tv",
                                     title: "Resolution",
-                                    subtitle: "4K UHD High Dynamic Range",
+                                    subtitle: "Capture Quality",
                                     isLast: false
                                 ) {
-                                    HStack(spacing: 8) {
-                                        Text("PRO")
-                                            .font(.system(size: 10, weight: .bold))
-                                            .padding(.horizontal, 6)
-                                            .padding(.vertical, 2)
-                                            .background(DesignSystem.Colors.secondaryContainer.opacity(0.2))
-                                            .foregroundColor(DesignSystem.Colors.secondary)
-                                            .cornerRadius(4)
-                                        
-                                        Image(systemName: "chevron.right")
-                                            .font(.system(size: 12, weight: .semibold))
-                                            .foregroundColor(DesignSystem.Colors.secondaryText)
+                                    Picker("", selection: $appState.settings.videoQuality) {
+                                        ForEach(VideoQuality.allCases) { quality in
+                                            Text(quality.rawValue).tag(quality)
+                                        }
                                     }
+                                    .pickerStyle(.menu)
+                                    .tint(DesignSystem.Colors.secondaryText)
                                 }
                                 
                                 SettingsRow(
@@ -115,9 +109,13 @@ struct SettingsView: View {
                                     subtitle: "Cinematic Standard",
                                     isLast: false
                                 ) {
-                                    Text("24 FPS")
-                                        .font(DesignSystem.Typography.label)
-                                        .foregroundColor(DesignSystem.Colors.secondaryText)
+                                    Picker("", selection: $appState.settings.frameRate) {
+                                        Text("24 FPS").tag(24)
+                                        Text("30 FPS").tag(30)
+                                        Text("60 FPS").tag(60)
+                                    }
+                                    .pickerStyle(.menu)
+                                    .tint(DesignSystem.Colors.secondaryText)
                                 }
                                 
                                 SettingsRow(
@@ -126,7 +124,7 @@ struct SettingsView: View {
                                     subtitle: "Digital Gimbal Mode",
                                     isLast: true
                                 ) {
-                                    Toggle("", isOn: .constant(false))
+                                    Toggle("", isOn: $appState.settings.stabilizationEnabled)
                                         .labelsHidden()
                                         .tint(DesignSystem.Colors.accentContainer)
                                 }

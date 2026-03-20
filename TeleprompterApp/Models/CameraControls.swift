@@ -129,7 +129,7 @@ enum CameraFilter: String, CaseIterable, Identifiable {
 
 // MARK: - Video Quality
 
-enum VideoQuality: String, CaseIterable, Identifiable {
+enum VideoQuality: String, CaseIterable, Identifiable, Codable {
     case low = "720p"
     case medium = "1080p"
     case high = "1080p HDR"
