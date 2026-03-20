@@ -32,13 +32,26 @@ struct RecordingView: View {
             // LAYER 1: Full Screen Background (Video)
             GeometryReader { fullGeo in
                 ZStack {
-                    // Live camera preview — session connected ONLY after startRunning completes
-                    // to prevent AVFoundation's internal dispatch_sync(main) deadlock.
-                    CameraPreviewView(
-                        session: cameraService.captureSession,
-                        isSessionRunning: cameraService.isSessionRunning
-                    )
-                        .ignoresSafeArea()
+                    if (cameraService.depthEnabled || cameraService.greenScreenEnabled || cameraService.activeFilter != .none),
+                       let processedImage = cameraService.processedPreviewImage {
+                        MetalPreviewView(ciImage: processedImage)
+                            .ignoresSafeArea()
+                            .contentShape(Rectangle())
+                            .gesture(
+                                DragGesture(minimumDistance: 0)
+                                    .onEnded { value in
+                                        handleTapToFocus(at: value.location, in: fullGeo.size)
+                                    }
+                            )
+                    } else {
+                        // Live camera preview — session connected ONLY after startRunning completes
+                        // to prevent AVFoundation's internal dispatch_sync(main) deadlock.
+                        CameraPreviewView(
+                            session: cameraService.captureSession,
+                            isSessionRunning: cameraService.isSessionRunning
+                        )
+                            .ignoresSafeArea()
+                    }
                     
                     // Focus indicator
                     FocusIndicatorView(
@@ -92,6 +105,13 @@ struct RecordingView: View {
                     // Permission Request Overlay
                     if permissionDenied {
                         PermissionDeniedView()
+                    }
+                    
+                    // Camera Loading Overlay — shown during ~12s hardware init
+                    if !cameraService.isSessionRunning && !permissionDenied {
+                        CameraLoadingOverlay()
+                            .transition(.opacity)
+                            .animation(.easeOut(duration: 0.6), value: cameraService.isSessionRunning)
                     }
                 }
             }
@@ -580,4 +600,85 @@ struct ScriptPickerSheet: View {
     RecordingView()
         .environmentObject(AppState())
         .environmentObject(TeleprompterSettings())
+}
+
+// MARK: - Camera Loading Overlay
+
+/// Premium animated loading overlay shown during camera hardware initialization.
+/// Displays a pulsing camera icon with animated gradient ring and branding.
+struct CameraLoadingOverlay: View {
+    @State private var ringRotation: Double = 0
+    @State private var pulseScale: CGFloat = 0.95
+    
+    var body: some View {
+        ZStack {
+            // Full-bleed dark background
+            Color.black
+                .ignoresSafeArea()
+            
+            VStack(spacing: 28) {
+                Spacer()
+                
+                // Animated ring + camera icon
+                ZStack {
+                    // Outer gradient ring (rotating)
+                    Circle()
+                        .stroke(
+                            AngularGradient(
+                                gradient: Gradient(colors: [
+                                    DesignSystem.Colors.accentContainer.opacity(0.0),
+                                    DesignSystem.Colors.accentContainer.opacity(0.3),
+                                    DesignSystem.Colors.accent.opacity(0.8),
+                                    DesignSystem.Colors.accent,
+                                    DesignSystem.Colors.accentContainer.opacity(0.0)
+                                ]),
+                                center: .center
+                            ),
+                            style: StrokeStyle(lineWidth: 3, lineCap: .round)
+                        )
+                        .frame(width: 88, height: 88)
+                        .rotationEffect(.degrees(ringRotation))
+                    
+                    // Inner subtle ring
+                    Circle()
+                        .stroke(Color.white.opacity(0.08), lineWidth: 1)
+                        .frame(width: 72, height: 72)
+                    
+                    // Camera icon
+                    Image(systemName: "video.fill")
+                        .font(.system(size: 28, weight: .medium))
+                        .foregroundStyle(
+                            LinearGradient(
+                                colors: [DesignSystem.Colors.accent, DesignSystem.Colors.accentContainer],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
+                        .scaleEffect(pulseScale)
+                }
+                
+                // Status text
+                VStack(spacing: 8) {
+                    Text("Initializing Camera")
+                        .font(.system(size: 17, weight: .semibold, design: .rounded))
+                        .foregroundColor(DesignSystem.Colors.primaryText)
+                    
+                    Text("Setting up your recording session…")
+                        .font(.system(size: 13, weight: .regular))
+                        .foregroundColor(DesignSystem.Colors.primaryText.opacity(0.5))
+                }
+                
+                Spacer()
+                Spacer()
+            }
+        }
+        .onAppear {
+            withAnimation(.linear(duration: 2.0).repeatForever(autoreverses: false)) {
+                ringRotation = 360
+            }
+            withAnimation(.easeInOut(duration: 1.2).repeatForever(autoreverses: true)) {
+                pulseScale = 1.08
+            }
+        }
+    }
 }
